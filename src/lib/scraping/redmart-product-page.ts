@@ -12,6 +12,20 @@ type LazadaTrackingData = {
   };
 };
 
+type RedMartPromotionProduct = {
+  itemId?: unknown;
+  link?: unknown;
+  skuId?: unknown;
+  tags?: unknown;
+  title?: unknown;
+};
+
+type RedMartPromotionTarget = {
+  productUrl: string;
+  retailerSku?: string;
+  titleRaw: string;
+};
+
 export function parseRedMartProductPage(
   html: string,
   productUrl: string
@@ -91,6 +105,38 @@ export function extractRedMartPromotionText(htmlOrText: string): string | undefi
   return uniquePromos.length > 0 ? uniquePromos.join("; ") : undefined;
 }
 
+export function extractRedMartPromotionTextFromApiPayload(
+  payloads: string[],
+  target: RedMartPromotionTarget
+): string | undefined {
+  const promos: string[] = [];
+
+  for (const payload of payloads) {
+    const parsed = safeJsonParse(payload);
+    if (!parsed) {
+      continue;
+    }
+
+    for (const group of findPromotionGroups(parsed)) {
+      const titlePromotion = extractRedMartPromotionText(String(group.title));
+      if (!titlePromotion) {
+        continue;
+      }
+
+      for (const product of group.products) {
+        if (!isMatchingPromotionProduct(product, target)) {
+          continue;
+        }
+
+        promos.push(titlePromotion);
+        promos.push(...extractTagPromotions(product.tags));
+      }
+    }
+  }
+
+  return formatPromotionText(promos);
+}
+
 export function extractRedMartRenderedPrice(pageText: string): number | undefined {
   const priceBlock = pageText.match(/\n\$(\d+(?:\.\d{1,2})?)\n(?:\$\d+(?:\.\d{1,2})\n-\d+%|Only\s+\d+\s+items left|Promotions|Add to cart)/i);
   const visibleSalePrice = priceBlock?.[1] ? Number(priceBlock[1]) : NaN;
@@ -110,4 +156,99 @@ export function extractRedMartRenderedSize(pageText: string): string | undefined
 
 function normalizeSpaces(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function safeJsonParse(payload: string): unknown {
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
+function findPromotionGroups(value: unknown): Array<{
+  title: string;
+  products: RedMartPromotionProduct[];
+}> {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  const products = Object.values(record).find(isPromotionProductArray);
+  const title = typeof record.title === "string" ? record.title : undefined;
+  const current = title && products ? [{ title, products }] : [];
+
+  return [
+    ...current,
+    ...Object.values(record).flatMap((child) => {
+      if (Array.isArray(child)) {
+        return child.flatMap(findPromotionGroups);
+      }
+
+      return findPromotionGroups(child);
+    })
+  ];
+}
+
+function isPromotionProductArray(value: unknown): value is RedMartPromotionProduct[] {
+  return (
+    Array.isArray(value) &&
+    value.some(
+      (item) =>
+        Boolean(item) &&
+        typeof item === "object" &&
+        ("skuId" in item || "itemId" in item || "link" in item)
+    )
+  );
+}
+
+function isMatchingPromotionProduct(
+  product: RedMartPromotionProduct,
+  target: RedMartPromotionTarget
+) {
+  const retailerSku = target.retailerSku ? String(target.retailerSku) : "";
+  const itemId = getRedMartItemId(target.productUrl);
+  const link = typeof product.link === "string" ? product.link : "";
+  const title = typeof product.title === "string" ? product.title : "";
+
+  return (
+    Boolean(retailerSku && String(product.skuId ?? "") === retailerSku) ||
+    Boolean(retailerSku && link.includes(`-s${retailerSku}`)) ||
+    Boolean(itemId && String(product.itemId ?? "") === itemId) ||
+    Boolean(itemId && link.includes(`pdp-i${itemId}-`)) ||
+    normalizeComparableText(title) === normalizeComparableText(target.titleRaw)
+  );
+}
+
+function extractTagPromotions(tags: unknown) {
+  if (!Array.isArray(tags)) {
+    return [];
+  }
+
+  return tags.flatMap((tag) => {
+    if (!tag || typeof tag !== "object" || !("text" in tag)) {
+      return [];
+    }
+
+    const text = (tag as { text?: unknown }).text;
+    return typeof text === "string" ? [text] : [];
+  });
+}
+
+function formatPromotionText(promos: string[]) {
+  const normalized = promos
+    .map((promo) => extractRedMartPromotionText(promo) ?? normalizeSpaces(promo))
+    .filter(Boolean);
+  const uniquePromos = [...new Set(normalized)];
+
+  return uniquePromos.length > 0 ? uniquePromos.join("; ") : undefined;
+}
+
+function getRedMartItemId(url: string) {
+  return url.match(/pdp-i(\d+)/)?.[1] ?? "";
+}
+
+function normalizeComparableText(value: string) {
+  return normalizeSpaces(value).toLowerCase();
 }

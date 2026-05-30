@@ -3,6 +3,7 @@ import {
   extractRedMartRenderedPrice,
   extractRedMartRenderedSize,
   extractRedMartPromotionText,
+  extractRedMartPromotionTextFromApiPayload,
   parseRedMartProductPage
 } from "@/lib/scraping/redmart-product-page";
 
@@ -59,6 +60,40 @@ describe("RedMart/Lazada product page parser", () => {
         Any 3 Save 38%
       `)
     ).toBe("Any 3 Save 38%; Spend $45.00 + free gift");
+  });
+
+  it("extracts matching RedMart promotions from multibuy API payloads", () => {
+    const payload = JSON.stringify({
+      data: {
+        modules: [
+          {
+            title: "Any 3 Save 38%",
+            products: [
+              {
+                itemId: "3476860111",
+                link: "//www.lazada.sg/products/pdp-i3476860111-s23012446237.html",
+                skuId: "23012446237",
+                tags: [{ text: "Spend $45 + Free Gift" }],
+                title: "Magnum Mini White Chocolate Almond Mix 6x55ml - Frozen"
+              },
+              {
+                itemId: "301118872",
+                skuId: "527230478",
+                title: "Magnum Mini Almond Multipack Ice Cream 6 x 55ml - Frozen"
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(
+      extractRedMartPromotionTextFromApiPayload([payload], {
+        productUrl: "https://www.lazada.sg/products/pdp-i3476860111-s23012446237.html",
+        retailerSku: "23012446237",
+        titleRaw: "Magnum Mini White Chocolate Almond Mix 6x55ml - Frozen"
+      })
+    ).toBe("Any 3 Save 38%; Spend $45 + Free Gift");
   });
 
   it("prefers browser-rendered sale price and pack size", () => {
