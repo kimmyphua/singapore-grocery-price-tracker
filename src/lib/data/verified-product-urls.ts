@@ -20,6 +20,22 @@ export const verifiedProductUrls: VerifiedProductUrl[] = [
     url: "https://coldstorage.com.sg/product/magnum-mini-almond-6s"
   },
   {
+    productSlug: "magnum-almond-3x110ml",
+    url: "https://www.fairprice.com.sg/product/magnum-ice-cream-almond-3-x-110ml-11875144"
+  },
+  {
+    productSlug: "magnum-almond-3x110ml",
+    url: "https://coldstorage.com.sg/product/magnum-almond-3-x-110ml"
+  },
+  {
+    productSlug: "magnum-mini-white-chocolate-6x55ml",
+    url: "https://www.lazada.sg/products/pdp-i3476860111-s23012446237.html"
+  },
+  {
+    productSlug: "magnum-mini-white-chocolate-6x55ml",
+    url: "https://coldstorage.com.sg/product/magnum-mini-white-chocolate-6-x-55ml"
+  },
+  {
     productSlug: "bulla-vanilla-2l",
     url: "https://www.fairprice.com.sg/product/11491431"
   },
@@ -42,17 +58,5 @@ export const verifiedProductUrls: VerifiedProductUrl[] = [
   {
     productSlug: "tillamook-ice-cream-1-42l",
     url: "https://coldstorage.com.sg/product/tillamook-old-fashioned-vanilla-ice-cream-15l"
-  },
-  {
-    productSlug: "kitkat-2-finger-10x15g",
-    url: "https://www.fairprice.com.sg/product/nestle-kit-kat-2-finger-chocolate-bar-milk-sharebag-10-x-15g-13273564"
-  },
-  {
-    productSlug: "kitkat-2-finger-10x15g",
-    url: "https://www.lazada.sg/products/pdp-i301148778.html?price=7.45&stock=1"
-  },
-  {
-    productSlug: "kinder-bueno-3x43g",
-    url: "https://www.fairprice.com.sg/product/kinder-bueno-milk-chocolate-3s-x-43g-13042672"
   }
 ];

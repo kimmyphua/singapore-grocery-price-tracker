@@ -68,6 +68,7 @@ describe("cached latest prices", () => {
               isActive: true
             },
             canonicalProduct: {
+              isActive: true,
               slug: "kitkat-2-finger-10x15g"
             }
           }
@@ -87,6 +88,9 @@ describe("cached latest prices", () => {
       expect.objectContaining({
         where: {
           retailerListing: {
+            canonicalProduct: {
+              isActive: true
+            },
             retailer: {
               isActive: true
             }

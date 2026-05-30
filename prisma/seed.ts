@@ -16,11 +16,13 @@ const inactiveRetailers = [
 
 const products = [
   ["magnum-mini-almond-6x55ml", "Magnum", "Ice cream", "Almond", 6, 55, "ml", 330, ["Magnum Mini Almond 6 x 55ml", "Magnum almond ice cream"]],
+  ["magnum-almond-3x110ml", "Magnum", "Ice cream", "Almond", 3, 110, "ml", 330, ["Magnum Almond 3 x 110ml", "Magnum almond ice cream sticks 3s"]],
+  ["magnum-mini-white-chocolate-6x55ml", "Magnum", "Ice cream", "White Chocolate", 6, 55, "ml", 330, ["Magnum Mini White Chocolate 6 x 55ml", "Magnum white chocolate ice cream sticks 6s"]],
   ["bulla-vanilla-2l", "Bulla", "Ice cream", "Vanilla", 1, 2, "l", 2, ["Bulla vanilla ice cream 2L", "Bulla creamy classics"]],
-  ["tillamook-ice-cream-1-42l", "Tillamook", "Ice cream", null, 1, 1.42, "l", 1.42, ["Tillamook ice cream", "Tillamook 1.42L"]],
-  ["kitkat-2-finger-10x15g", "KitKat", "Chocolate", "Chocolate", 10, 15, "g", 150, ["KitKat 2 Finger 10 x 15g", "KitKat chocolate bar multipack"]],
-  ["kinder-bueno-3x43g", "Kinder Bueno", "Chocolate", "Milk Chocolate", 3, 43, "g", 129, ["Kinder Bueno 3 x 43g", "Kinder Bueno multipack"]]
+  ["tillamook-ice-cream-1-42l", "Tillamook", "Ice cream", null, 1, 1.42, "l", 1.42, ["Tillamook ice cream", "Tillamook 1.42L"]]
 ] as const;
+
+const inactiveProductSlugs = ["kitkat-2-finger-10x15g", "kinder-bueno-3x43g"] as const;
 
 async function main() {
   for (const [slug, name, baseUrl] of retailers) {
@@ -49,10 +51,15 @@ async function main() {
   for (const [slug, brand, family, flavour, packCount, unitSize, unit, totalSize, searchTerms] of products) {
     await prisma.canonicalProduct.upsert({
       where: { slug },
-      update: { brand, family, flavour, packCount, unitSize, unit, totalSize, searchTerms: [...searchTerms] },
+      update: { brand, family, flavour, packCount, unitSize, unit, totalSize, searchTerms: [...searchTerms], isActive: true },
       create: { slug, brand, family, flavour, packCount, unitSize, unit, totalSize, searchTerms: [...searchTerms] }
     });
   }
+
+  await prisma.canonicalProduct.updateMany({
+    where: { slug: { in: [...inactiveProductSlugs] } },
+    data: { isActive: false }
+  });
 }
 
 main()

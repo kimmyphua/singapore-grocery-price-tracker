@@ -46,13 +46,10 @@ export async function getCachedLatestPrices(
           retailer: {
             isActive: true
           },
-          ...(options.productSlug
-            ? {
-                canonicalProduct: {
-                  slug: options.productSlug
-                }
-              }
-            : {})
+          canonicalProduct: {
+            isActive: true,
+            ...(options.productSlug ? { slug: options.productSlug } : {})
+          }
         }
       },
       orderBy: { capturedAt: "desc" },

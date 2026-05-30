@@ -48,6 +48,22 @@ export const products: ProductSummary[] = [
     searchTerms: ["Magnum Mini Almond 6 x 55ml", "Magnum almond ice cream"]
   },
   {
+    slug: "magnum-almond-3x110ml",
+    brand: "Magnum",
+    family: "Ice cream",
+    flavour: "Almond",
+    pack: "3 x 110ml",
+    searchTerms: ["Magnum Almond 3 x 110ml", "Magnum almond ice cream sticks 3s"]
+  },
+  {
+    slug: "magnum-mini-white-chocolate-6x55ml",
+    brand: "Magnum",
+    family: "Ice cream",
+    flavour: "White Chocolate",
+    pack: "6 x 55ml",
+    searchTerms: ["Magnum Mini White Chocolate 6 x 55ml", "Magnum white chocolate ice cream sticks 6s"]
+  },
+  {
     slug: "bulla-vanilla-2l",
     brand: "Bulla",
     family: "Ice cream",
@@ -62,21 +78,5 @@ export const products: ProductSummary[] = [
     flavour: null,
     pack: "1.42L",
     searchTerms: ["Tillamook ice cream", "Tillamook 1.42L"]
-  },
-  {
-    slug: "kitkat-2-finger-10x15g",
-    brand: "KitKat",
-    family: "Chocolate",
-    flavour: "Chocolate",
-    pack: "10 x 15g",
-    searchTerms: ["KitKat 2 Finger 10 x 15g", "KitKat chocolate bar multipack"]
-  },
-  {
-    slug: "kinder-bueno-3x43g",
-    brand: "Kinder Bueno",
-    family: "Chocolate",
-    flavour: "Milk Chocolate",
-    pack: "3 x 43g",
-    searchTerms: ["Kinder Bueno 3 x 43g", "Kinder Bueno multipack"]
-  },
+  }
 ];
