@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MatchStatus {
+  UNMATCHED
+  PENDING_REVIEW
+  AUTO_MATCHED
+  REJECTED
+}
+
+enum ScrapeRunStatus {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+enum PromotionCategory {
+  SNACKS
+  ICE_CREAM
+}
+
+enum PromotionFlyerStatus {
+  IMPORTED
+  PARSE_FAILED
+}
+
+enum PromotionReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Retailer {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  baseUrl   String
+  country   String   @default("SG")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  listings   RetailerListing[]
+  scrapeRuns ScrapeRun[]
+  promotionFlyers PromotionFlyer[]
+  promotionDeals  PromotionDeal[]
+}
+
+model CanonicalProduct {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  brand       String
+  family      String
+  flavour     String?
+  packCount   Int      @default(1)
+  unitSize    Float
+  unit        String
+  totalSize   Float
+  searchTerms String[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  listings RetailerListing[]
+}
+
+model RetailerListing {
+  id                 String      @id @default(cuid())
+  retailerId         String
+  canonicalProductId String?
+  retailerSku        String?
+  titleRaw           String
+  brandRaw           String?
+  imageUrl           String?
+  productUrl         String
+  normalizedBrand    String?
+  normalizedFamily   String?
+  normalizedFlavour  String?
+  packCount          Int?
+  unitSize           Float?
+  unit               String?
+  totalSize          Float?
+  matchStatus        MatchStatus @default(UNMATCHED)
+  matchConfidence    Float?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  retailer         Retailer          @relation(fields: [retailerId], references: [id])
+  canonicalProduct CanonicalProduct? @relation(fields: [canonicalProductId], references: [id])
+  priceSnapshots   PriceSnapshot[]
+
+  @@unique([retailerId, productUrl])
+  @@index([canonicalProductId])
+}
+
+model PriceSnapshot {
+  id                String   @id @default(cuid())
+  retailerListingId String
+  scrapeRunId       String?
+  price             Decimal  @db.Decimal(10, 2)
+  unitPrice         Decimal? @db.Decimal(12, 5)
+  promotionText     String?
+  currency          String   @default("SGD")
+  isAvailable       Boolean  @default(true)
+  capturedAt        DateTime @default(now())
+
+  retailerListing RetailerListing @relation(fields: [retailerListingId], references: [id])
+  scrapeRun       ScrapeRun?      @relation(fields: [scrapeRunId], references: [id])
+
+  @@index([capturedAt])
+}
+
+model ScrapeRun {
+  id             String          @id @default(cuid())
+  retailerId     String?
+  status         ScrapeRunStatus @default(STARTED)
+  query          String?
+  startedAt      DateTime        @default(now())
+  completedAt    DateTime?
+  errorMessage   String?
+  itemsFound     Int             @default(0)
+  itemsStored    Int             @default(0)
+
+  retailer       Retailer?       @relation(fields: [retailerId], references: [id])
+  priceSnapshots PriceSnapshot[]
+}
+
+model PromotionFlyer {
+  id           String                @id @default(cuid())
+  retailerId   String
+  title        String
+  sourceUrl    String
+  assetUrl     String
+  assetPath    String
+  assetHash    String                @unique
+  validFrom    DateTime?
+  validTo      DateTime?
+  fetchedAt    DateTime              @default(now())
+  status       PromotionFlyerStatus  @default(IMPORTED)
+  errorMessage String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  retailer Retailer        @relation(fields: [retailerId], references: [id])
+  deals    PromotionDeal[]
+
+  @@index([retailerId])
+  @@index([validFrom, validTo])
+}
+
+model PromotionDeal {
+  id           String                @id @default(cuid())
+  flyerId      String
+  retailerId   String
+  category     PromotionCategory
+  rawTitle     String
+  packText     String?
+  priceText    String?
+  parsedPrice  Decimal?              @db.Decimal(10, 2)
+  promoText    String?
+  pageNumber   Int
+  sourceX      Float?
+  sourceY      Float?
+  sourceWidth  Float?
+  sourceHeight Float?
+  confidence   Float
+  reviewStatus PromotionReviewStatus @default(PENDING)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  flyer    PromotionFlyer @relation(fields: [flyerId], references: [id])
+  retailer Retailer       @relation(fields: [retailerId], references: [id])
+
+  @@index([reviewStatus])
+  @@index([category])
+  @@index([retailerId])
+  @@index([flyerId])
+}

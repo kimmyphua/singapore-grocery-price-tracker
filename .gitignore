@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+coverage
+.env
+.env*.local
+!.env.example
+*.log
+dist
+tsconfig.tsbuildinfo
+prisma/*.db
+data/weekly-ads
+eng.traineddata
+qa-screenshots

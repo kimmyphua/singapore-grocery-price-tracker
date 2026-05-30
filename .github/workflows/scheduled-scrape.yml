@@ -1,0 +1,25 @@
+name: Scheduled Scrape
+
+on:
+  workflow_dispatch:
+  # Enable only after retailer selectors are verified.
+  # schedule:
+  #   - cron: "15 20 * * *"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SCRAPER_USER_AGENT: ${{ secrets.SCRAPER_USER_AGENT }}
+      SCRAPER_MIN_DELAY_MS: "2000"
+      SCRAPER_MAX_RESULTS_PER_QUERY: "10"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run scrape
