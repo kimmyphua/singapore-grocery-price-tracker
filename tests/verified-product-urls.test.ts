@@ -6,4 +6,14 @@ describe("verified product URLs", () => {
     expect(verifiedProductUrls.some((item) => item.url.includes("foodpanda.sg"))).toBe(false);
     expect(verifiedProductUrls.some((item) => item.retailerSlug === "giant")).toBe(false);
   });
+
+  it("keeps verified RedMart multibuy fallback text when headless Lazada omits promotion labels", () => {
+    expect(
+      verifiedProductUrls.find(
+        (item) => item.productSlug === "magnum-mini-white-chocolate-6x55ml" && item.url.includes("lazada.sg")
+      )
+    ).toMatchObject({
+      fallbackPromotionText: "Any 3 Save 38%; Spend $45.00 + free gift"
+    });
+  });
 });
