@@ -75,7 +75,7 @@ export default async function DashboardPage() {
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <InfoBlock label="Best retailer" value={cheapest?.retailerName ?? "No price yet"} />
-                <InfoBlock value={formatPrice(cheapest)} label="Shelf price" />
+                <InfoBlock value={formatOriginalPrice(cheapest)} label="Original price" />
                 <InfoBlock
                   label="Best value"
                   value={cheapest ? formatBestValue(cheapest) : "-"}
@@ -95,7 +95,7 @@ export default async function DashboardPage() {
               <tr>
                 <th className="px-4 py-3 font-semibold">Product</th>
                 <th className="px-4 py-3 font-semibold">Best retailer</th>
-                <th className="px-4 py-3 font-semibold">Shelf price</th>
+                <th className="px-4 py-3 font-semibold">Original price</th>
                 <th className="px-4 py-3 font-semibold">Best value</th>
                 <th className="px-4 py-3 font-semibold">Price status</th>
               </tr>
@@ -110,7 +110,7 @@ export default async function DashboardPage() {
                     <div className="text-xs text-slate-500">{product.pack}</div>
                   </td>
                   <td className="px-4 py-3">{cheapest?.retailerName ?? "No price yet"}</td>
-                  <td className="px-4 py-3">{formatPrice(cheapest)}</td>
+                  <td className="px-4 py-3">{formatOriginalPrice(cheapest)}</td>
                   <td className="px-4 py-3">{cheapest ? formatBestValue(cheapest) : "-"}</td>
                   <td className="px-4 py-3">
                     <StatusBadge hasPrice={Boolean(cheapest)} />
@@ -142,8 +142,9 @@ function formatBestValue(price: {
   return `${deal} · $${price.effectiveUnitPrice.toFixed(4)}/unit`;
 }
 
-function formatPrice(price: LatestPrice | undefined) {
-  return price?.price !== null && price?.price !== undefined ? `$${price.price.toFixed(2)}` : "-";
+function formatOriginalPrice(price: LatestPrice | undefined) {
+  const originalPrice = price?.originalPrice ?? price?.price;
+  return originalPrice !== null && originalPrice !== undefined ? `$${originalPrice.toFixed(2)}` : "-";
 }
 
 function getLastUpdated(prices: LatestPrice[]) {

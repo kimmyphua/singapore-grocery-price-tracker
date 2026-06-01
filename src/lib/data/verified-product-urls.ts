@@ -8,8 +8,7 @@ export type VerifiedProductUrl = {
 export const verifiedProductUrls: VerifiedProductUrl[] = [
   {
     productSlug: "magnum-mini-almond-6x55ml",
-    url: "https://www.lazada.sg/products/pdp-i301118872-s527230478.html?price=12.12&stock=1",
-    fallbackPromotionText: "Any 3 Save 38%"
+    url: "https://www.lazada.sg/products/pdp-i301118872-s527230478.html"
   },
   {
     productSlug: "magnum-mini-almond-6x55ml",
@@ -29,8 +28,7 @@ export const verifiedProductUrls: VerifiedProductUrl[] = [
   },
   {
     productSlug: "magnum-mini-white-chocolate-6x55ml",
-    url: "https://www.lazada.sg/products/pdp-i3476860111-s23012446237.html",
-    fallbackPromotionText: "Any 3 Save 38%; Spend $45.00 + free gift"
+    url: "https://www.lazada.sg/products/pdp-i3476860111-s23012446237.html"
   },
   {
     productSlug: "magnum-mini-white-chocolate-6x55ml",

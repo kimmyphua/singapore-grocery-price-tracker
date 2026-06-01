@@ -11,6 +11,7 @@ describe("price refresh persistence", () => {
       retailerSlug: "fairprice",
       retailerName: "FairPrice",
       price: 12.11,
+      originalPrice: 12.95,
       unitPrice: 0.0367,
       effectivePrice: 9.9,
       effectiveUnitPrice: 0.03,
@@ -49,6 +50,7 @@ describe("price refresh persistence", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           price: 12.11,
+          originalPrice: 12.95,
           unitPrice: 0.0367,
           promotionText: "Any 2 for $19.80",
           isAvailable: true
@@ -74,6 +76,7 @@ describe("price refresh persistence", () => {
             retailerSlug: "redmart",
             retailerName: "RedMart",
             price: null,
+            originalPrice: null,
             unitPrice: null,
             effectivePrice: null,
             effectiveUnitPrice: null,

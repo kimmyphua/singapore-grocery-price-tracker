@@ -28,6 +28,7 @@ export function parseColdStorageProductPage(
     retailerSlug: "cold-storage",
     titleRaw: title,
     price: payload?.promoPrice ?? payload?.price ?? null,
+    originalPrice: getColdStorageOriginalPrice(payload),
     productUrl,
     imageUrl: payload?.image ?? $("meta[property='og:image']").attr("content"),
     isAvailable: payload?.inventoryStatus?.toLowerCase() !== "out of stock",
@@ -37,6 +38,14 @@ export function parseColdStorageProductPage(
     promotionText: payload?.discountLabel || undefined,
     size: payload?.size
   };
+}
+
+function getColdStorageOriginalPrice(payload: ColdStoragePayload | null): number | null {
+  if (!payload?.price || !payload.promoPrice || payload.price <= payload.promoPrice) {
+    return null;
+  }
+
+  return payload.price;
 }
 
 function extractProductPayload(html: string): ColdStoragePayload | null {

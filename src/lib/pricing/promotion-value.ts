@@ -57,6 +57,18 @@ function parsePromotionCandidates(
     });
   }
 
+  const fixedDiscountMultibuy = promotionText.match(
+    /any\s+(\d+)\s+save\s+\$(\d+(?:\.\d+)?)/i
+  );
+  if (fixedDiscountMultibuy) {
+    const quantity = Number(fixedDiscountMultibuy[1]);
+    const discount = Number(fixedDiscountMultibuy[2]);
+    candidates.push({
+      effectivePrice: (shelfPrice * quantity - discount) / quantity,
+      dealQuantity: quantity
+    });
+  }
+
   return candidates;
 }
 

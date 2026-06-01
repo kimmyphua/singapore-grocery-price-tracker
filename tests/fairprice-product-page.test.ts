@@ -40,6 +40,7 @@ describe("FairPrice product page parser", () => {
       retailerSlug: "fairprice",
       titleRaw: "Bulla Creamy Classics Ice Cream - Vanilla",
       price: 12.95,
+      originalPrice: null,
       productUrl: "https://www.fairprice.com.sg/product/11491431",
       imageUrl: "https://media.nedigital.sg/fairprice/fpol/media/images/product/XL/11491431_XL1_20250911.jpg",
       isAvailable: false,
@@ -48,6 +49,58 @@ describe("FairPrice product page parser", () => {
       currency: "SGD",
       promotionText: "Any 2 for $19.80",
       size: "2L"
+    });
+  });
+
+  it("keeps the crossed-out FairPrice price when an offer price is shown", () => {
+    const html = `
+      <script type="application/ld+json">
+        {
+          "@context": "https://schema.org/",
+          "@type": "Product",
+          "name": "Tillamook Ice Cream - Vanilla Bean",
+          "sku": "1359122",
+          "brand": { "@type": "Thing", "name": "Tillamook" },
+          "offers": {
+            "priceCurrency": "SGD",
+            "price": "15.20",
+            "availability": "https://schema.org/OutOfStock"
+          }
+        }
+      </script>
+      <body>
+        Offer $15.20 $15.53 Save $0.33 Till 1st Jul 2026
+        Tillamook Ice Cream - Vanilla Bean 1.42L | Brand: Tillamook
+      </body>
+      <script>
+        self.__next_data = {
+          "products": [{
+            "name": "Tillamook Ice Cream - Vanilla Bean",
+            "storeSpecificData": [{
+              "productId": 13198654,
+              "mrp": "18.00"
+            }]
+          }, {
+            "name": "Tillamook Ice Cream - Vanilla Bean",
+            "storeSpecificData": [{
+              "productId": 1359122,
+              "mrp": "15.53",
+              "discount": "0.33"
+            }]
+          }]
+        };
+      </script>
+    `;
+
+    expect(
+      parseFairPriceProductPage(
+        html,
+        "https://www.fairprice.com.sg/product/tillamook-ice-cream-vanilla-bean-1-42l-13198654"
+      )
+    ).toMatchObject({
+      price: 15.2,
+      originalPrice: 15.53,
+      promotionText: "Save $0.33 Till 1st Jul 2026"
     });
   });
 

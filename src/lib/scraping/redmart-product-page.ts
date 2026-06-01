@@ -40,10 +40,15 @@ export function parseRedMartProductPage(
     throw new Error("RedMart/Lazada product data was not found");
   }
 
+  const trackingPrice = parsePrice(trackingData?.pdt_price);
+  const queryPrice = parsePrice(getQueryParam(productUrl, "price"));
+  const price = chooseBestVisiblePrice(trackingPrice, queryPrice);
+
   return {
     retailerSlug: "redmart",
     titleRaw: title,
-    price: chooseBestVisiblePrice(trackingData?.pdt_price, getQueryParam(productUrl, "price")),
+    price,
+    originalPrice: getRedMartOriginalPrice(trackingPrice, price),
     productUrl,
     imageUrl: $("meta[property='og:image']").attr("content"),
     isAvailable: getQueryParam(productUrl, "stock") !== "0",
@@ -55,14 +60,25 @@ export function parseRedMartProductPage(
 }
 
 function chooseBestVisiblePrice(
-  trackingPrice: string | null | undefined,
-  queryPrice: string | null
+  trackingPrice: number | null,
+  queryPrice: number | null
 ): number | null {
-  const prices = [parsePrice(trackingPrice), parsePrice(queryPrice)].filter(
+  const prices = [trackingPrice, queryPrice].filter(
     (price): price is number => price !== null
   );
 
   return prices.length > 0 ? Math.min(...prices) : null;
+}
+
+function getRedMartOriginalPrice(
+  trackingPrice: number | null,
+  currentPrice: number | null
+): number | null {
+  if (trackingPrice === null || currentPrice === null || trackingPrice <= currentPrice + 0.005) {
+    return null;
+  }
+
+  return trackingPrice;
 }
 
 function extractTrackingData(html: string): LazadaTrackingData | null {
@@ -97,9 +113,10 @@ function getQueryParam(url: string, key: string): string | null {
 
 export function extractRedMartPromotionText(htmlOrText: string): string | undefined {
   const promos = [
+    ...htmlOrText.matchAll(/Any\s+\d+\s+Save\s+\$\d+(?:\.\d+)?/gi),
     ...htmlOrText.matchAll(/Any\s+\d+\s+Save\s+\d+(?:\.\d+)?%/gi),
     ...htmlOrText.matchAll(/Spend\s+\$?\d+(?:\.\d+)?\s+\+\s+free gift/gi)
-  ].map((match) => normalizeSpaces(match[0]));
+  ].map((match) => normalizePromotionLabel(match[0]));
   const uniquePromos = [...new Set(promos)];
 
   return uniquePromos.length > 0 ? uniquePromos.join("; ") : undefined;
@@ -119,16 +136,15 @@ export function extractRedMartPromotionTextFromApiPayload(
 
     for (const group of findPromotionGroups(parsed)) {
       const titlePromotion = extractRedMartPromotionText(String(group.title));
-      if (!titlePromotion) {
-        continue;
-      }
 
       for (const product of group.products) {
         if (!isMatchingPromotionProduct(product, target)) {
           continue;
         }
 
-        promos.push(titlePromotion);
+        if (titlePromotion) {
+          promos.push(titlePromotion);
+        }
         promos.push(...extractTagPromotions(product.tags));
       }
     }
@@ -147,6 +163,20 @@ export function extractRedMartRenderedPrice(pageText: string): number | undefine
   const firstPrice = pageText.match(/\$(\d+(?:\.\d{1,2})?)/);
   const parsed = firstPrice?.[1] ? Number(firstPrice[1]) : NaN;
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export function extractRedMartRenderedOriginalPrice(pageText: string): number | undefined {
+  const saleAndOriginal = pageText.match(
+    /\n\$(\d+(?:\.\d{1,2})?)\n\$(\d+(?:\.\d{1,2})?)\n-\d+%/i
+  );
+  const salePrice = saleAndOriginal?.[1] ? Number(saleAndOriginal[1]) : NaN;
+  const originalPrice = saleAndOriginal?.[2] ? Number(saleAndOriginal[2]) : NaN;
+
+  if (Number.isFinite(salePrice) && Number.isFinite(originalPrice) && originalPrice > salePrice) {
+    return originalPrice;
+  }
+
+  return undefined;
 }
 
 export function extractRedMartRenderedSize(pageText: string): string | undefined {
@@ -238,11 +268,21 @@ function extractTagPromotions(tags: unknown) {
 
 function formatPromotionText(promos: string[]) {
   const normalized = promos
-    .map((promo) => extractRedMartPromotionText(promo) ?? normalizeSpaces(promo))
+    .map((promo) => extractRedMartPromotionText(promo) ?? normalizePromotionLabel(promo))
     .filter(Boolean);
   const uniquePromos = [...new Set(normalized)];
 
   return uniquePromos.length > 0 ? uniquePromos.join("; ") : undefined;
+}
+
+function normalizePromotionLabel(value: string) {
+  const text = normalizeSpaces(value);
+  const freeGift = text.match(/Spend\s+\$?(\d+(?:\.\d+)?)\s+\+\s+free gift/i);
+  if (freeGift) {
+    return `Spend $${Number(freeGift[1]).toFixed(2)} + free gift`;
+  }
+
+  return text;
 }
 
 function getRedMartItemId(url: string) {

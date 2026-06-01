@@ -26,6 +26,14 @@ describe("promotion value calculation", () => {
     });
   });
 
+  it("uses fixed discount multibuy offers for effective unit price", () => {
+    expect(calculateBestValue(12.12, 330, "Any 3 Save $13.85")).toEqual({
+      effectivePrice: 7.5033,
+      effectiveUnitPrice: 0.02274,
+      dealQuantity: 3
+    });
+  });
+
   it("ignores non-price promotions", () => {
     expect(calculateBestValue(12.95, 2, "Spend $45.00 + free gift")).toEqual({
       effectivePrice: 12.95,

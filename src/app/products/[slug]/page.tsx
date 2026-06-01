@@ -1,18 +1,44 @@
-import { products } from "@/lib/data/seed-data";
-import type { LatestPrice } from "@/lib/data/seed-data";
-import { getCachedLatestPrices } from "@/lib/pricing/cached-prices";
+import { products, retailers } from "@/lib/data/seed-data";
+import type { LatestPrice, WeeklyPriceHistory, WeeklyPriceHistorySort } from "@/lib/data/seed-data";
+import { getCachedLatestPrices, getCachedWeeklyPriceHistory } from "@/lib/pricing/cached-prices";
 import { notFound } from "next/navigation";
 import { RefreshButton } from "@/app/refresh-button";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProductDetailPage({ params }: { params: { slug: string } }) {
+type ProductDetailSearchParams = {
+  historyRetailer?: string;
+  historyQuery?: string;
+  historySort?: string;
+  historyDirection?: string;
+  historyPage?: string;
+};
+
+export default async function ProductDetailPage({
+  params,
+  searchParams
+}: {
+  params: { slug: string };
+  searchParams?: ProductDetailSearchParams;
+}) {
   const product = products.find((item) => item.slug === params.slug);
   if (!product) {
     notFound();
   }
 
-  const prices = await getCachedLatestPrices(undefined, { productSlug: product.slug });
+  const historyControls = getHistoryControls(searchParams);
+  const [prices, priceHistory] = await Promise.all([
+    getCachedLatestPrices(undefined, { productSlug: product.slug }),
+    getCachedWeeklyPriceHistory(undefined, {
+      productSlug: product.slug,
+      retailerSlug: historyControls.retailerSlug,
+      query: historyControls.query,
+      sort: historyControls.sort,
+      direction: historyControls.direction,
+      page: historyControls.page,
+      pageSize: historyControls.pageSize
+    })
+  ]);
   const sortedPrices = [...prices].sort(
     (left, right) =>
       (left.effectiveUnitPrice ?? Infinity) - (right.effectiveUnitPrice ?? Infinity) ||
@@ -87,7 +113,7 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
                     </div>
                     <div className="mt-1 text-xs text-slate-500">{formatStatus(price.scrapeStatus)}</div>
                   </div>
-                  <LabeledValue label="Shelf price" value={formatPrice(price.price)} />
+                  <LabeledValue label="Original price" value={formatPrice(getOriginalPrice(price))} />
                   <LabeledValue
                     label="Deal price"
                     value={
@@ -117,10 +143,109 @@ export default async function ProductDetailPage({ params }: { params: { slug: st
       </section>
 
       <section className="rounded-lg border border-dashed border-teal/25 bg-white p-4">
-        <h2 className="font-semibold text-ink">Price history</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Price history will appear here after more saved updates are collected.
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-ink">Price history</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Latest saved snapshot per retailer for each Singapore week.
+            </p>
+          </div>
+          <form className="grid gap-2 sm:grid-cols-[150px_220px_auto]" action={`/products/${product.slug}`}>
+            <select
+              name="historyRetailer"
+              defaultValue={historyControls.retailerSlug ?? ""}
+              className="h-10 rounded-md border border-teal/20 bg-white px-3 text-sm text-ink"
+            >
+              <option value="">All retailers</option>
+              {retailers.map((retailer) => (
+                <option key={retailer.slug} value={retailer.slug}>
+                  {retailer.name}
+                </option>
+              ))}
+            </select>
+            <input
+              name="historyQuery"
+              defaultValue={historyControls.query}
+              placeholder="Search retailer or promo"
+              className="h-10 rounded-md border border-teal/20 bg-white px-3 text-sm text-ink"
+            />
+            <input type="hidden" name="historySort" value={historyControls.sort} />
+            <input type="hidden" name="historyDirection" value={historyControls.direction} />
+            <button
+              type="submit"
+              className="h-10 rounded-md bg-teal px-4 text-sm font-semibold text-white transition hover:bg-teal/90"
+            >
+              Filter
+            </button>
+          </form>
+        </div>
+        {priceHistory.totalRows === 0 ? (
+          <p className="mt-2 text-sm text-slate-600">
+            No weekly history rows match these filters yet.
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 overflow-x-auto">
+            <div className="min-w-[720px] divide-y divide-teal/10 text-sm">
+              <div className="grid grid-cols-[1.1fr_1fr_0.8fr_0.9fr_0.9fr_1.4fr] gap-3 pb-2 text-xs font-semibold uppercase text-slate-500">
+                <HistorySortLink controls={historyControls} productSlug={product.slug} label="Week" sort="week" />
+                <HistorySortLink controls={historyControls} productSlug={product.slug} label="Retailer" sort="retailer" />
+                <HistorySortLink controls={historyControls} productSlug={product.slug} label="Original" sort="shelfPrice" />
+                <HistorySortLink controls={historyControls} productSlug={product.slug} label="Deal" sort="dealPrice" />
+                <HistorySortLink controls={historyControls} productSlug={product.slug} label="Unit" sort="unitValue" />
+                <span>Promotion</span>
+              </div>
+              {priceHistory.rows.map((price) => (
+                <div
+                  key={`${price.productSlug}-${price.retailerSlug}-${price.weekStart}`}
+                  className="grid grid-cols-[1.1fr_1fr_0.8fr_0.9fr_0.9fr_1.4fr] gap-3 py-3 text-slate-700"
+                >
+                  <div>
+                    <div className="font-medium text-ink">{formatWeek(price.weekStart)}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {formatCapturedDate(price.capturedAt)}
+                    </div>
+                  </div>
+                  <div className="font-medium text-ink">{price.retailerName}</div>
+                  <div>{formatPrice(getOriginalPrice(price))}</div>
+                  <div>{formatDealPrice(price)}</div>
+                  <div>
+                    {price.effectiveUnitPrice !== null
+                      ? `$${price.effectiveUnitPrice.toFixed(4)}`
+                      : "-"}
+                  </div>
+                  <div>{price.statusMessage ?? price.promotionText ?? "No promo"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+            <div className="mt-4 flex flex-col gap-3 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                Showing {getPageStart(priceHistory.page, priceHistory.pageSize)}-
+                {getPageEnd(priceHistory.page, priceHistory.pageSize, priceHistory.totalRows)} of{" "}
+                {priceHistory.totalRows} weekly rows
+              </div>
+              <div className="flex gap-2">
+                <HistoryPageLink
+                  controls={historyControls}
+                  productSlug={product.slug}
+                  page={priceHistory.page - 1}
+                  disabled={priceHistory.page <= 1}
+                >
+                  Previous
+                </HistoryPageLink>
+                <HistoryPageLink
+                  controls={historyControls}
+                  productSlug={product.slug}
+                  page={priceHistory.page + 1}
+                  disabled={priceHistory.page >= priceHistory.totalPages}
+                >
+                  Next
+                </HistoryPageLink>
+              </div>
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
@@ -151,8 +276,167 @@ function formatBestValue(price: LatestPrice) {
   return `${deal} · $${price.effectiveUnitPrice.toFixed(4)}/unit`;
 }
 
+function formatDealPrice(price: Pick<LatestPrice, "effectivePrice" | "dealQuantity">) {
+  if (price.effectivePrice === null) {
+    return "-";
+  }
+
+  return `$${price.effectivePrice.toFixed(2)}${price.dealQuantity > 1 ? ` x ${price.dealQuantity}` : ""}`;
+}
+
+function formatWeek(weekStart: WeeklyPriceHistory["weekStart"]) {
+  return `Week of ${formatDate(weekStart)}`;
+}
+
+function formatCapturedDate(capturedAt: string) {
+  return `Updated ${formatDate(capturedAt)}`;
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en-SG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC"
+  }).format(new Date(value));
+}
+
 function formatPrice(price: number | null) {
   return price !== null ? `$${price.toFixed(2)}` : "-";
+}
+
+function getOriginalPrice(price: Pick<LatestPrice, "originalPrice" | "price">) {
+  return price.originalPrice ?? price.price;
+}
+
+type HistoryControls = {
+  retailerSlug?: string;
+  query: string;
+  sort: WeeklyPriceHistorySort;
+  direction: "asc" | "desc";
+  page: number;
+  pageSize: number;
+};
+
+function getHistoryControls(searchParams: ProductDetailSearchParams | undefined): HistoryControls {
+  return {
+    retailerSlug: getRetailerSlug(searchParams?.historyRetailer),
+    query: searchParams?.historyQuery?.trim() ?? "",
+    sort: getHistorySort(searchParams?.historySort),
+    direction: searchParams?.historyDirection === "asc" ? "asc" : "desc",
+    page: getPositiveInteger(searchParams?.historyPage, 1),
+    pageSize: 10
+  };
+}
+
+function getRetailerSlug(value: string | undefined) {
+  return retailers.some((retailer) => retailer.slug === value) ? value : undefined;
+}
+
+function getHistorySort(value: string | undefined): WeeklyPriceHistorySort {
+  if (
+    value === "retailer" ||
+    value === "shelfPrice" ||
+    value === "dealPrice" ||
+    value === "unitValue"
+  ) {
+    return value;
+  }
+
+  return "week";
+}
+
+function getPositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function HistorySortLink({
+  controls,
+  productSlug,
+  label,
+  sort
+}: {
+  controls: HistoryControls;
+  productSlug: string;
+  label: string;
+  sort: WeeklyPriceHistorySort;
+}) {
+  const active = controls.sort === sort;
+  const direction = active && controls.direction === "asc" ? "desc" : "asc";
+  const indicator = active ? (controls.direction === "asc" ? " ↑" : " ↓") : "";
+
+  return (
+    <a
+      href={getHistoryHref(productSlug, { ...controls, sort, direction, page: 1 })}
+      className="text-left transition hover:text-teal"
+    >
+      {label}
+      {indicator}
+    </a>
+  );
+}
+
+function HistoryPageLink({
+  controls,
+  productSlug,
+  page,
+  disabled,
+  children
+}: {
+  controls: HistoryControls;
+  productSlug: string;
+  page: number;
+  disabled: boolean;
+  children: string;
+}) {
+  if (disabled) {
+    return (
+      <span className="rounded-md border border-slate-200 px-3 py-2 text-slate-400">
+        {children}
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={getHistoryHref(productSlug, { ...controls, page })}
+      className="rounded-md border border-teal/20 px-3 py-2 font-medium text-teal transition hover:bg-meadow/10"
+    >
+      {children}
+    </a>
+  );
+}
+
+function getHistoryHref(productSlug: string, controls: HistoryControls) {
+  const params = new URLSearchParams();
+
+  if (controls.retailerSlug) {
+    params.set("historyRetailer", controls.retailerSlug);
+  }
+  if (controls.query) {
+    params.set("historyQuery", controls.query);
+  }
+  if (controls.sort !== "week") {
+    params.set("historySort", controls.sort);
+  }
+  if (controls.direction !== "desc") {
+    params.set("historyDirection", controls.direction);
+  }
+  if (controls.page > 1) {
+    params.set("historyPage", String(controls.page));
+  }
+
+  const query = params.toString();
+  return `/products/${productSlug}${query ? `?${query}` : ""}`;
+}
+
+function getPageStart(page: number, pageSize: number) {
+  return (page - 1) * pageSize + 1;
+}
+
+function getPageEnd(page: number, pageSize: number, totalRows: number) {
+  return Math.min(page * pageSize, totalRows);
 }
 
 function LabeledValue({ label, value }: { label: string; value: string }) {

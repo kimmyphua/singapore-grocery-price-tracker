@@ -88,6 +88,7 @@ export async function storeLatestPrices(client: RefreshPriceClient, prices: Late
       data: {
         retailerListing: { connect: { id: listing.id } },
         price: price.price,
+        originalPrice: price.originalPrice,
         unitPrice: price.unitPrice,
         promotionText: price.promotionText,
         currency: "SGD",

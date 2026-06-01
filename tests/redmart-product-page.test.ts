@@ -23,6 +23,7 @@ describe("RedMart/Lazada product page parser", () => {
       retailerSlug: "redmart",
       titleRaw: "Magnum Mini Almond Multipack Ice Cream 6 x 55ml - Frozen",
       price: 12.12,
+      originalPrice: null,
       productUrl: "https://www.lazada.sg/products/pdp-i301118872-s527230478.html",
       imageUrl: "https://img.lazcdn.com/magnum.webp",
       isAvailable: true,
@@ -46,7 +47,8 @@ describe("RedMart/Lazada product page parser", () => {
         "https://www.lazada.sg/products/pdp-i577892355-s1652060339.html?price=16.08&stock=1"
       )
     ).toMatchObject({
-      price: 16.08
+      price: 16.08,
+      originalPrice: 19.12
     });
   });
 
@@ -56,6 +58,7 @@ describe("RedMart/Lazada product page parser", () => {
       extractRedMartPromotionText(`
         Promotions
         Spend $45.00 + free gift
+        Spend $45 + Free Gift
         Any 3 Save 38%
         Any 3 Save 38%
       `)
@@ -93,7 +96,41 @@ describe("RedMart/Lazada product page parser", () => {
         retailerSku: "23012446237",
         titleRaw: "Magnum Mini White Chocolate Almond Mix 6x55ml - Frozen"
       })
-    ).toBe("Any 3 Save 38%; Spend $45 + Free Gift");
+    ).toBe("Any 3 Save 38%; Spend $45.00 + free gift");
+  });
+
+  it("extracts fixed-value RedMart multibuy promotions from matching product tags", () => {
+    const payload = JSON.stringify({
+      data: {
+        modules: [
+          {
+            title: "Any 3 Save $13.85",
+            products: [
+              {
+                itemId: "301118872",
+                skuId: "527230478",
+                tags: [
+                  {
+                    backgroundColor: "#EE4054",
+                    text: "Any 3 Save $13.85",
+                    textColor: "#FFFFFF"
+                  }
+                ],
+                title: "Magnum Mini Almond Multipack Ice Cream 6 x 55ml - Frozen"
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    expect(
+      extractRedMartPromotionTextFromApiPayload([payload], {
+        productUrl: "https://www.lazada.sg/products/pdp-i301118872-s527230478.html",
+        retailerSku: "527230478",
+        titleRaw: "Magnum Mini Almond Multipack Ice Cream 6 x 55ml - Frozen"
+      })
+    ).toBe("Any 3 Save $13.85");
   });
 
   it("prefers browser-rendered sale price and pack size", () => {

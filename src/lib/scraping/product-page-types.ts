@@ -4,6 +4,7 @@ export type ParsedRetailerProduct = {
   retailerSlug: RetailerSlug;
   titleRaw: string;
   price: number | null;
+  originalPrice: number | null;
   productUrl: string;
   imageUrl?: string;
   isAvailable: boolean;

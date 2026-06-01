@@ -104,6 +104,7 @@ model PriceSnapshot {
   retailerListingId String
   scrapeRunId       String?
   price             Decimal  @db.Decimal(10, 2)
+  originalPrice     Decimal? @db.Decimal(10, 2)
   unitPrice         Decimal? @db.Decimal(12, 5)
   promotionText     String?
   currency          String   @default("SGD")

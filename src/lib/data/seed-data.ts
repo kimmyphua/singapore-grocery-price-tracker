@@ -18,6 +18,7 @@ export type LatestPrice = {
   retailerSlug: string;
   retailerName: string;
   price: number | null;
+  originalPrice: number | null;
   unitPrice: number | null;
   effectivePrice: number | null;
   effectiveUnitPrice: number | null;
@@ -29,6 +30,25 @@ export type LatestPrice = {
   scrapeStatus: "available" | "unavailable" | "blocked";
   statusMessage: string | null;
   source: "live-product-page" | "cached-price-snapshot";
+};
+
+export type WeeklyPriceHistory = LatestPrice & {
+  weekStart: string;
+};
+
+export type WeeklyPriceHistorySort =
+  | "week"
+  | "retailer"
+  | "shelfPrice"
+  | "dealPrice"
+  | "unitValue";
+
+export type WeeklyPriceHistoryResult = {
+  rows: WeeklyPriceHistory[];
+  totalRows: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 };
 
 export const retailers: RetailerSummary[] = [

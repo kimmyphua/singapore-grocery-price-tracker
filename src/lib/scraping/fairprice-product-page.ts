@@ -33,11 +33,13 @@ export function parseFairPriceProductPage(
     ? productJson.image[0]
     : productJson.image;
   const availability = productJson.offers?.availability?.trim().toLowerCase() ?? "";
+  const price = parsePrice(productJson.offers?.price);
 
   return {
     retailerSlug: "fairprice",
     titleRaw: productJson.name,
-    price: parsePrice(productJson.offers?.price),
+    price,
+    originalPrice: extractFairPriceOriginalPrice(html, pageText, productJson, price),
     productUrl,
     imageUrl: image,
     isAvailable: !availability.includes("outofstock"),
@@ -50,6 +52,68 @@ export function parseFairPriceProductPage(
     promotionText: extractFairPricePromotionText(html, pageText, productJson),
     size: extractFairPriceSize(pageText, productJson.name)
   };
+}
+
+function extractFairPriceOriginalPrice(
+  html: string,
+  pageText: string,
+  productJson: ProductJsonLd,
+  currentPrice: number | null
+): number | null {
+  if (currentPrice === null) {
+    return null;
+  }
+
+  const embeddedOriginalPrice = extractFairPriceOriginalPriceFromPayload(
+    html,
+    productJson.sku,
+    currentPrice
+  );
+  if (embeddedOriginalPrice !== null) {
+    return embeddedOriginalPrice;
+  }
+
+  const titleIndex = pageText.lastIndexOf(productJson.name ?? "");
+  const scope =
+    titleIndex === -1
+      ? pageText
+      : pageText.slice(Math.max(0, titleIndex - 240), titleIndex + (productJson.name?.length ?? 0) + 420);
+  const prices = [...scope.matchAll(/\$(\d+(?:\.\d{1,2})?)/g)]
+    .map((match) => Number(match[1]))
+    .filter((price) => Number.isFinite(price));
+  const hasCurrentPriceInScope = prices.some((price) => Math.abs(price - currentPrice) < 0.005);
+  if (!hasCurrentPriceInScope) {
+    return null;
+  }
+
+  const originalPrice = prices.find((price) => price > currentPrice + 0.005);
+
+  return originalPrice ?? null;
+}
+
+function extractFairPriceOriginalPriceFromPayload(
+  html: string,
+  sku: string | undefined,
+  currentPrice: number
+): number | null {
+  if (!sku) {
+    return null;
+  }
+
+  const marker = new RegExp(`"productId"\\s*:\\s*${escapeRegExp(sku)}\\b`);
+  const markerMatch = marker.exec(html);
+  if (markerMatch === null) {
+    return null;
+  }
+
+  const productSlice = html.slice(markerMatch.index, markerMatch.index + 5000);
+  const mrp = productSlice.match(/"mrp"\s*:\s*"(\d+(?:\.\d+)?)"/);
+  const mrp8 = productSlice.match(/"mrp8"\s*:\s*(\d+(?:\.\d+)?)/);
+  const originalPrice = Number(mrp?.[1] ?? mrp8?.[1]);
+
+  return Number.isFinite(originalPrice) && originalPrice > currentPrice + 0.005
+    ? originalPrice
+    : null;
 }
 
 function extractFairPricePromotionText(

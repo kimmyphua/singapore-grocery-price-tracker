@@ -35,6 +35,7 @@ export async function getLiveLatestPrices(options: { productSlug?: string } = {}
         retailerSlug: scraped.retailerSlug,
         retailerName: retailer?.name ?? scraped.retailerSlug,
         price: scraped.price,
+        originalPrice: scraped.originalPrice,
         unitPrice: scraped.price !== null ? scraped.price / pack.totalSize : null,
         effectivePrice: value?.effectivePrice ?? null,
         effectiveUnitPrice: value?.effectiveUnitPrice ?? null,
@@ -78,18 +79,36 @@ async function scrapeProductUrl(
 }
 
 function getPromotionText(
-  scraped: { promotionText?: string; isAvailable: boolean; price: number | null },
+  scraped: {
+    promotionText?: string;
+    isAvailable: boolean;
+    price: number | null;
+    originalPrice: number | null;
+  },
   verifiedUrl: VerifiedProductUrl
 ) {
+  const promotionText =
+    scraped.promotionText ??
+    verifiedUrl.fallbackPromotionText ??
+    getInferredSavingsText(scraped.price, scraped.originalPrice);
+
   if (scraped.price === null) {
-    return scraped.promotionText ?? verifiedUrl.fallbackPromotionText ?? null;
+    return promotionText;
   }
 
   if (!scraped.isAvailable) {
-    return scraped.promotionText ? `${scraped.promotionText}; out of stock` : "Out of stock";
+    return promotionText ? `${promotionText}; out of stock` : "Out of stock";
   }
 
-  return scraped.promotionText ?? verifiedUrl.fallbackPromotionText ?? null;
+  return promotionText;
+}
+
+function getInferredSavingsText(price: number | null, originalPrice: number | null) {
+  if (price === null || originalPrice === null || originalPrice <= price + 0.005) {
+    return null;
+  }
+
+  return `Save $${(originalPrice - price).toFixed(2)}`;
 }
 
 function buildRedMartUrlFallback(
@@ -105,6 +124,7 @@ function buildRedMartUrlFallback(
     retailerSlug: "redmart" as const,
     titleRaw: [product.brand, product.flavour, product.family].filter(Boolean).join(" "),
     price,
+    originalPrice: null,
     productUrl: verifiedUrl.url,
     isAvailable: new URL(verifiedUrl.url).searchParams.get("stock") !== "0",
     retailerSku: getRedMartSku(verifiedUrl.url),
