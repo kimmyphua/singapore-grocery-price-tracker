@@ -98,6 +98,36 @@ describe("weekly promotion parser", () => {
     );
   });
 
+  it("uses verified Cold Storage flyer card data when serverless PDF parsing is unavailable", async () => {
+    const deals = await parsePromotionAsset(
+      {
+        assetBytes: Buffer.from("current-cold-storage-grocery-selections"),
+        assetKind: "pdf",
+        assetUrl: "http://csp.coldstorage.com.sg/media/weeklydeals/371/wk22_28_may_grocery_a3_fa-v1-20260527123710.pdf"
+      },
+      {
+        extractTextPages: async () => {
+          throw new Error("pdf runtime unavailable");
+        }
+      }
+    );
+
+    expect(deals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "ICE_CREAM",
+          rawTitle: "TILLAMOOK Ice Cream Assorted 1.42L",
+          priceText: "$14.95"
+        }),
+        expect.objectContaining({
+          category: "SNACKS",
+          rawTitle: "CHEETOS Corn Puff Snacks Assorted 200g/215g",
+          priceText: "$4.70"
+        })
+      ])
+    );
+  });
+
   it("uses verified Sheng Siong flyer cards instead of loose OCR grouping", async () => {
     const deals = await parsePromotionAsset({
       assetBytes: Buffer.from("current-sheng-siong-four-days-special"),

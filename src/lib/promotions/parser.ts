@@ -105,6 +105,21 @@ function getVerifiedCurrentFlyerDeals(assetUrl: string): ExtractedPromotionDeal[
     ];
   }
 
+  if (assetUrl.includes("wk22_28_may_grocery_a3_fa-v1-20260527123710.pdf")) {
+    return [
+      verifiedDeal("SNACKS", "LINDT Excellence Chocolate Block Assorted 100g", "$7.95", "SAVE $3.35; WAS $11.30", "100g", 1, 341, 487),
+      verifiedDeal("ICE_CREAM", "TILLAMOOK Ice Cream Assorted 1.42L", "$14.95", "SAVE $2; WAS $16.95", "1.42L", 1, 649, 1026),
+      verifiedDeal("SNACKS", "FERRERO ROCHER Chocolate T16 200g", "$8.95", "SAVE $5.55; WAS $14.50", "200g", 1, 359, 826),
+      verifiedDeal("SNACKS", "PEPPERIDGE FARM Goldfish Crackers Assorted 187g", "$7.90", "ANY 2; SAVE $3.70; WAS $11.60", "187g", 1, 212, 815),
+      verifiedDeal("SNACKS", "CHEETOS Corn Puff Snacks Assorted 200g/215g", "$4.70", "SAVE $1.20; WAS $5.90", "200g/215g", 1, 65, 826),
+      verifiedDeal("SNACKS", "COBS Popcorn Assorted 80g - 120g", null, "BUY 1 GET 1 FREE; WAS $4.60 EACH", "80g - 120g", 1, 426, 477),
+      verifiedDeal("SNACKS", "FALWASSER Crispbread Assorted 120g", "$7.55", "SAVE $2.60; WAS $10.15", "120g", 2, 438, 276),
+      verifiedDeal("SNACKS", "UNCLE TOBYS Muesli Bars Assorted 145g - 185g", "$8.90", "SAVE $1.30; WAS $10.20", "145g - 185g", 2, 259, 463),
+      verifiedDeal("SNACKS", "AMAZIN'GRAZE Granola Assorted 250g", "$15.50", "ANY 2; SAVE $5.40; WAS $20.90", "250g", 2, 618, 258),
+      verifiedDeal("SNACKS", "BEAR Fruit Rolls Assorted 5 x 20g", null, "BUY 1 GET 1 FREE; WAS $6.40 EACH", "5 x 20g", 2, 256, 264)
+    ];
+  }
+
   if (assetUrl.includes("SSAD26-1162-4-DAYS-28-310526-ST_ET.pdf")) {
     return [
       verifiedDeal("SNACKS", "HUP SENG Crackers Assorted Flavours 225g-250g", "$5.00", "For 2; SAVE 17%", "225g-250g", 1, 743, 960),
@@ -131,7 +146,7 @@ function isUnverifiedDenseShengSiongFlyer(assetUrl: string) {
 function verifiedDeal(
   category: PromotionCategory,
   rawTitle: string,
-  priceText: string,
+  priceText: string | null,
   promoText: string,
   packText: string,
   pageNumber: number,
@@ -143,7 +158,7 @@ function verifiedDeal(
     rawTitle,
     packText,
     priceText,
-    parsedPrice: parseDisplayPrice(priceText),
+    parsedPrice: priceText ? parseDisplayPrice(priceText) : null,
     promoText,
     pageNumber,
     sourceX,
