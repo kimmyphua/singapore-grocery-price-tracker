@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum MatchStatus {
@@ -46,8 +47,8 @@ model Retailer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  listings   RetailerListing[]
-  scrapeRuns ScrapeRun[]
+  listings        RetailerListing[]
+  scrapeRuns      ScrapeRun[]
   promotionFlyers PromotionFlyer[]
   promotionDeals  PromotionDeal[]
 }
@@ -118,35 +119,35 @@ model PriceSnapshot {
 }
 
 model ScrapeRun {
-  id             String          @id @default(cuid())
-  retailerId     String?
-  status         ScrapeRunStatus @default(STARTED)
-  query          String?
-  startedAt      DateTime        @default(now())
-  completedAt    DateTime?
-  errorMessage   String?
-  itemsFound     Int             @default(0)
-  itemsStored    Int             @default(0)
+  id           String          @id @default(cuid())
+  retailerId   String?
+  status       ScrapeRunStatus @default(STARTED)
+  query        String?
+  startedAt    DateTime        @default(now())
+  completedAt  DateTime?
+  errorMessage String?
+  itemsFound   Int             @default(0)
+  itemsStored  Int             @default(0)
 
   retailer       Retailer?       @relation(fields: [retailerId], references: [id])
   priceSnapshots PriceSnapshot[]
 }
 
 model PromotionFlyer {
-  id           String                @id @default(cuid())
+  id           String               @id @default(cuid())
   retailerId   String
   title        String
   sourceUrl    String
   assetUrl     String
   assetPath    String
-  assetHash    String                @unique
+  assetHash    String               @unique
   validFrom    DateTime?
   validTo      DateTime?
-  fetchedAt    DateTime              @default(now())
-  status       PromotionFlyerStatus  @default(IMPORTED)
+  fetchedAt    DateTime             @default(now())
+  status       PromotionFlyerStatus @default(IMPORTED)
   errorMessage String?
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   retailer Retailer        @relation(fields: [retailerId], references: [id])
   deals    PromotionDeal[]
