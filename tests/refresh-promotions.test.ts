@@ -264,4 +264,63 @@ describe("weekly promotion refresh", () => {
     );
     expect(createManyDeals).toHaveBeenCalled();
   });
+
+  it("imports flyer candidates when local asset archival is unavailable", async () => {
+    const createFlyer = vi.fn(async () => ({ id: "flyer_1" }));
+    const createManyDeals = vi.fn(async () => ({ count: 1 }));
+    const client = {
+      retailer: { findUnique: vi.fn(async () => ({ id: "retailer_1" })) },
+      promotionFlyer: {
+        findUnique: vi.fn(async () => null),
+        create: createFlyer
+      },
+      promotionDeal: { createMany: createManyDeals }
+    };
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        discoverSources: async () => [
+          {
+            retailerSlug: "fairprice",
+            title: "FairPrice Weekly Savers",
+            sourceUrl: "https://promotions.fairprice.com.sg/price-drop-buy-now-weekly-savers/page/1",
+            assetUrl: "https://view.publitas.com/flyer.jpg",
+            assetKind: "image"
+          }
+        ],
+        fetchAsset: async () => ({
+          bytes: Buffer.from("flyer-image"),
+          contentType: "image/jpeg"
+        }),
+        parseAsset: async () => [
+          {
+            category: "SNACKS",
+            rawTitle: "KIT KAT Block Chocolates Assorted 160g",
+            packText: "160g",
+            priceText: "$4.20",
+            parsedPrice: 4.2,
+            promoText: "SAVE 34%",
+            pageNumber: 1,
+            confidence: 0.96
+          }
+        ],
+        writeAsset: async () => {
+          throw new Error("EROFS: read-only file system");
+        }
+      }
+    );
+
+    expect(result).toEqual({ flyersFetched: 1, duplicatesSkipped: 0, candidatesCreated: 1, parseFailures: 0 });
+    expect(createFlyer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assetPath: "https://view.publitas.com/flyer.jpg",
+          status: "IMPORTED"
+        })
+      })
+    );
+    expect(createManyDeals).toHaveBeenCalled();
+  });
 });

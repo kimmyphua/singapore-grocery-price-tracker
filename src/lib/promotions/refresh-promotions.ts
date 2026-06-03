@@ -152,7 +152,12 @@ export async function refreshWeeklyPromotions(
         continue;
       }
 
-      const assetPath = await writeAsset(source, asset.bytes, asset.contentType, assetHash);
+      const assetPath = await getAssetPathOrRemoteUrl(
+        source,
+        asset,
+        assetHash,
+        writeAsset
+      );
       let deals: ExtractedPromotionDeal[];
       try {
         deals = await parseAsset({
@@ -290,6 +295,19 @@ async function fetchPromotionAsset(source: PromotionSource): Promise<PromotionAs
     bytes: Buffer.from(await response.arrayBuffer()),
     contentType: response.headers.get("content-type")
   };
+}
+
+async function getAssetPathOrRemoteUrl(
+  source: PromotionSource,
+  asset: PromotionAsset,
+  assetHash: string,
+  writeAsset: NonNullable<PromotionRefreshDeps["writeAsset"]>
+) {
+  try {
+    return await writeAsset(source, asset.bytes, asset.contentType, assetHash);
+  } catch {
+    return source.assetUrl;
+  }
 }
 
 async function writePromotionAsset(
