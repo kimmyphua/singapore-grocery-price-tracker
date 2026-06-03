@@ -368,10 +368,19 @@ function parseTesseractTsv(tsv: string | null | undefined): PromotionTextItem[] 
 }
 
 async function loadRuntimeModule<T>(specifier: string): Promise<T> {
-  const importer = new Function("specifier", "return import(specifier)") as (
-    specifier: string
-  ) => Promise<T>;
-  return importer(specifier);
+  if (specifier === "pdfjs-dist/legacy/build/pdf.mjs") {
+    return (await import("pdfjs-dist/legacy/build/pdf.mjs")) as T;
+  }
+  if (specifier === "@napi-rs/canvas") {
+    const importer = new Function("specifier", "return import(specifier)") as (
+      specifier: string
+    ) => Promise<T>;
+    return importer(specifier);
+  }
+  if (specifier === "tesseract.js") {
+    return (await import("tesseract.js")) as T;
+  }
+  throw new Error(`Unsupported promotion parser runtime module: ${specifier}`);
 }
 
 function getCategory(text: string): PromotionCategory | null {
