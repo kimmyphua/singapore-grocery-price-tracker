@@ -100,7 +100,7 @@ function parsePrice(value: string | null | undefined): number | null {
   }
 
   const price = Number(value.replace(/[^0-9.]/g, ""));
-  return Number.isFinite(price) ? price : null;
+  return Number.isFinite(price) && price > 0 ? price : null;
 }
 
 function getQueryParam(url: string, key: string): string | null {

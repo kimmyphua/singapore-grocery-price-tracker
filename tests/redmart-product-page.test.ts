@@ -52,6 +52,24 @@ describe("RedMart/Lazada product page parser", () => {
     });
   });
 
+  it("treats zero Lazada prices as missing instead of a real price", () => {
+    const html = `
+      <script>
+        var pdpTrackingData = "{\\"brand_name\\":\\"Magnum\\",\\"pdt_sku\\":301118872,\\"pdt_simplesku\\":527230478,\\"pdt_name\\":\\"Magnum Mini Almond Multipack Ice Cream 6 x 55ml - Frozen\\",\\"core\\":{\\"currencyCode\\":\\"SGD\\"},\\"pdt_price\\":\\"$0.00\\"}";
+      </script>
+    `;
+
+    expect(
+      parseRedMartProductPage(
+        html,
+        "https://www.lazada.sg/products/pdp-i301118872-s527230478.html?price=0&stock=1"
+      )
+    ).toMatchObject({
+      price: null,
+      originalPrice: null
+    });
+  });
+
 
   it("extracts promotions from browser-rendered text", () => {
     expect(
