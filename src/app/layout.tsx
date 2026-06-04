@@ -21,17 +21,23 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <a href="/products">Products</a>
                 <a href="/deals">Deals</a>
                 <a href="/admin/promotions">Review</a>
-                <a
-                  href="https://github.com/kimmyphua/singapore-grocery-price-tracker"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  GitHub
-                </a>
               </div>
             </nav>
           </header>
           <main className="mx-auto max-w-6xl px-4 py-6 sm:px-5 sm:py-8">{children}</main>
+          <footer className="border-t border-teal/15 bg-white">
+            <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-5 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <p>Made by Kimberly Phua</p>
+              <a
+                href="https://github.com/kimmyphua/singapore-grocery-price-tracker"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-teal transition hover:text-ink"
+              >
+                View on GitHub
+              </a>
+            </div>
+          </footer>
         </div>
       </body>
     </html>
