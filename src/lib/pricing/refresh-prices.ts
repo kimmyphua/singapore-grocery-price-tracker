@@ -26,7 +26,7 @@ export async function storeLatestPrices(client: RefreshPriceClient, prices: Late
   let skipped = 0;
 
   for (const price of prices) {
-    if (price.price === null) {
+    if (price.price === null || price.price <= 0) {
       skipped += 1;
       continue;
     }

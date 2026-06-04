@@ -138,7 +138,7 @@ function buildRedMartUrlFallback(
 function getQueryPrice(url: string): number | null {
   try {
     const price = Number(new URL(url).searchParams.get("price"));
-    return Number.isFinite(price) ? price : null;
+    return Number.isFinite(price) && price > 0 ? price : null;
   } catch {
     return null;
   }

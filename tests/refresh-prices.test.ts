@@ -96,4 +96,42 @@ describe("price refresh persistence", () => {
     expect(upsert).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
   });
+
+  it("skips non-positive prices instead of storing broken snapshots", async () => {
+    const upsert = vi.fn();
+    const create = vi.fn();
+
+    await expect(
+      storeLatestPrices(
+        {
+          retailer: { findUnique: vi.fn(async () => ({ id: "retailer_1" })) },
+          retailerListing: { upsert },
+          priceSnapshot: { create }
+        },
+        [
+          {
+            productSlug: "magnum-mini-almond-6x55ml",
+            retailerSlug: "redmart",
+            retailerName: "RedMart",
+            price: 0,
+            originalPrice: null,
+            unitPrice: 0,
+            effectivePrice: 0,
+            effectiveUnitPrice: 0,
+            dealQuantity: 1,
+            promotionText: null,
+            capturedAt: "2026-05-28T08:00:00.000Z",
+            productUrl: "https://www.lazada.sg/products/pdp-i301118872-s527230478.html",
+            isAvailable: true,
+            scrapeStatus: "available",
+            statusMessage: null,
+            source: "live-product-page"
+          }
+        ]
+      )
+    ).resolves.toEqual({ stored: 0, skipped: 1 });
+
+    expect(upsert).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
 });
