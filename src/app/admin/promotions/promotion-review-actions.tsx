@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FullPageLoadingOverlay } from "@/app/full-page-loading-overlay";
 
 type ReviewDeal = {
   id: string;
@@ -43,6 +44,7 @@ export function PromotionReviewActions({ deal }: { deal: ReviewDeal }) {
 
   return (
     <div className="mt-4 space-y-3">
+      {state === "saving" ? <FullPageLoadingOverlay message="Saving promotion review..." /> : null}
       <label className="block">
         <span className="text-xs font-semibold text-slate-500">Title</span>
         <input
@@ -116,6 +118,44 @@ export function PromotionReviewActions({ deal }: { deal: ReviewDeal }) {
       </div>
       {state === "error" ? <p className="text-xs font-semibold text-berry">Could not save this deal.</p> : null}
     </div>
+  );
+}
+
+export function BulkApprovePromotionReviews({ pendingCount }: { pendingCount: number }) {
+  const [state, setState] = useState<"idle" | "saving" | "error">("idle");
+
+  async function approveAll() {
+    setState("saving");
+    try {
+      const response = await fetch("/api/promotions/deals/bulk", { method: "PATCH" });
+      if (!response.ok) {
+        throw new Error("Bulk approve failed");
+      }
+      window.location.reload();
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <>
+      {state === "saving" ? <FullPageLoadingOverlay message="Approving all pending promotions..." /> : null}
+      <div className="flex flex-col items-stretch gap-2 sm:items-end">
+        <button
+          type="button"
+          onClick={approveAll}
+          disabled={state === "saving" || pendingCount === 0}
+          className="inline-flex h-10 items-center justify-center rounded-md bg-ink px-4 text-sm font-semibold text-white transition hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Approve all pending
+        </button>
+        <p className="max-w-sm text-xs leading-5 text-slate-500">
+          {state === "error"
+            ? "Could not approve all promotions. Try again in a moment."
+            : `${pendingCount} pending promotion${pendingCount === 1 ? "" : "s"} will move to approved.`}
+        </p>
+      </div>
+    </>
   );
 }
 

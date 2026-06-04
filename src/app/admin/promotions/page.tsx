@@ -1,6 +1,6 @@
 import { RefreshWeeklyDealsButton } from "@/app/deals/refresh-weekly-deals-button";
 import { getPendingPromotionDeals, getPromotionReviewCounts } from "@/lib/promotions/queries";
-import { PromotionReviewActions } from "./promotion-review-actions";
+import { BulkApprovePromotionReviews, PromotionReviewActions } from "./promotion-review-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,10 @@ export default async function AdminPromotionsPage({
               change product shelf prices or best-value calculations.
             </p>
           </div>
-          <RefreshWeeklyDealsButton />
+          <div className="grid gap-4 sm:grid-cols-2 lg:min-w-[430px]">
+            <RefreshWeeklyDealsButton />
+            <BulkApprovePromotionReviews pendingCount={pendingDeals.length} />
+          </div>
         </div>
       </section>
 
@@ -54,7 +57,12 @@ export default async function AdminPromotionsPage({
           <p className="mt-2 text-sm text-slate-600">
             Refresh weekly deals to fetch supermarket flyers and create new review candidates.
           </p>
-          <a href="/deals" className="mt-4 inline-flex text-sm font-semibold text-teal">
+          <a
+            href="/deals"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex text-sm font-semibold text-teal"
+          >
             View approved deals
           </a>
         </section>

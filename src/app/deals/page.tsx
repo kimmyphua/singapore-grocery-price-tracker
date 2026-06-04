@@ -71,7 +71,12 @@ export default async function DealsPage({ searchParams }: DealsPageProps) {
           <p className="mt-2 text-sm text-slate-600">
             Refresh weekly deals, then approve matching snack or ice cream promotions in the review queue.
           </p>
-          <a href="/admin/promotions" className="mt-4 inline-flex text-sm font-semibold text-teal">
+          <a
+            href="/admin/promotions"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex text-sm font-semibold text-teal"
+          >
             Review imported promotions
           </a>
         </section>
@@ -124,6 +129,8 @@ function FilterLink({
   return (
     <a
       href={href}
+      target="_blank"
+      rel="noreferrer"
       className={
         active
           ? "rounded-md bg-teal px-3 py-2 text-sm font-semibold text-white"

@@ -14,6 +14,8 @@ export default function ProductsPage() {
           <a
             key={product.slug}
             href={`/products/${product.slug}`}
+            target="_blank"
+            rel="noreferrer"
             className="rounded-lg border border-teal/15 bg-white p-4 shadow-sm transition hover:border-teal"
           >
             <div className="text-lg font-semibold text-ink">

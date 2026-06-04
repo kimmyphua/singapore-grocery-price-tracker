@@ -1,5 +1,6 @@
 import { products, retailers } from "@/lib/data/seed-data";
 import type { LatestPrice } from "@/lib/data/seed-data";
+import { formatSingaporeDateTime } from "@/lib/format/date-time";
 import { getCachedLatestPrices } from "@/lib/pricing/cached-prices";
 import { RefreshButton } from "./refresh-button";
 
@@ -35,6 +36,8 @@ export default async function DashboardPage() {
             <RefreshButton />
             <a
               href="/products"
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex h-10 items-center justify-center rounded-md border border-teal/30 px-4 text-center text-sm font-semibold text-teal transition hover:bg-teal/10"
             >
               Browse products
@@ -62,6 +65,8 @@ export default async function DashboardPage() {
             <a
               key={product.slug}
               href={`/products/${product.slug}`}
+              target="_blank"
+              rel="noreferrer"
               className="rounded-lg border border-teal/15 bg-white p-4 shadow-sm"
             >
               <div className="flex items-start justify-between gap-3">
@@ -104,7 +109,12 @@ export default async function DashboardPage() {
               {latestByProduct.map(({ product, cheapest }) => (
                 <tr key={product.slug} className="border-t border-teal/10">
                   <td className="px-4 py-3">
-                    <a href={`/products/${product.slug}`} className="font-semibold text-ink">
+                    <a
+                      href={`/products/${product.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-ink"
+                    >
                       {product.brand} {product.flavour ?? product.family}
                     </a>
                     <div className="text-xs text-slate-500">{product.pack}</div>
@@ -157,12 +167,7 @@ function getLastUpdated(prices: LatestPrice[]) {
     return "Never";
   }
 
-  return new Intl.DateTimeFormat("en-SG", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(latest);
+  return formatSingaporeDateTime(latest);
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

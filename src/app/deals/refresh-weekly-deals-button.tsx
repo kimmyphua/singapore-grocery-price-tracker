@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FullPageLoadingOverlay } from "@/app/full-page-loading-overlay";
 
 type RefreshState = "idle" | "loading" | "done" | "error";
 
@@ -38,18 +39,21 @@ export function RefreshWeeklyDealsButton() {
   }
 
   return (
-    <div className="flex flex-col items-stretch gap-2 sm:items-end">
-      <button
-        type="button"
-        onClick={refreshDeals}
-        disabled={state === "loading"}
-        className="inline-flex h-10 items-center justify-center rounded-md bg-teal px-4 text-sm font-semibold text-white transition hover:bg-teal/90 disabled:cursor-wait disabled:opacity-70"
-      >
-        {state === "loading" ? "Refreshing..." : "Refresh weekly deals"}
-      </button>
-      <p className="max-w-sm text-xs leading-5 text-slate-500">
-        {summary ?? "Fetches supermarket flyers and adds OCR matches to the review queue."}
-      </p>
-    </div>
+    <>
+      {state === "loading" ? <FullPageLoadingOverlay message="Refreshing weekly flyer deals..." /> : null}
+      <div className="flex flex-col items-stretch gap-2 sm:items-end">
+        <button
+          type="button"
+          onClick={refreshDeals}
+          disabled={state === "loading"}
+          className="inline-flex h-10 items-center justify-center rounded-md bg-teal px-4 text-sm font-semibold text-white transition hover:bg-teal/90 disabled:cursor-wait disabled:opacity-70"
+        >
+          {state === "loading" ? "Refreshing..." : "Refresh weekly deals"}
+        </button>
+        <p className="max-w-sm text-xs leading-5 text-slate-500">
+          {summary ?? "Fetches supermarket flyers and adds OCR matches to the review queue."}
+        </p>
+      </div>
+    </>
   );
 }
