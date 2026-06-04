@@ -81,6 +81,7 @@ export async function getCachedLatestPrices(
 
     return rows
       .filter((row) => row.retailerListing.canonicalProduct)
+      .filter(hasPositiveSnapshotPrice)
       .filter(isLatestRetailerProductRow)
       .map(mapCachedPriceRow);
   } catch {
@@ -120,6 +121,7 @@ export async function getCachedWeeklyPriceHistory(
     const weeklyRows = [...rows]
       .sort((left, right) => getTimestamp(right.capturedAt) - getTimestamp(left.capturedAt))
       .filter((row) => row.retailerListing.canonicalProduct)
+      .filter(hasPositiveSnapshotPrice)
       .filter(isLatestRetailerProductWeekRow)
       .map((row) => ({
         ...mapCachedPriceRow(row),
@@ -132,6 +134,10 @@ export async function getCachedWeeklyPriceHistory(
   } catch {
     return paginateWeeklyHistory([], options);
   }
+}
+
+function hasPositiveSnapshotPrice(row: CachedPriceRow) {
+  return toNumber(row.price) > 0;
 }
 
 function isLatestRetailerProductRow(

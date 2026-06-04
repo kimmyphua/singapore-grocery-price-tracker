@@ -59,8 +59,6 @@ export default async function AdminPromotionsPage({
           </p>
           <a
             href="/deals"
-            target="_blank"
-            rel="noreferrer"
             className="mt-4 inline-flex text-sm font-semibold text-teal"
           >
             View approved deals

@@ -73,8 +73,6 @@ export default async function DealsPage({ searchParams }: DealsPageProps) {
           </p>
           <a
             href="/admin/promotions"
-            target="_blank"
-            rel="noreferrer"
             className="mt-4 inline-flex text-sm font-semibold text-teal"
           >
             Review imported promotions
@@ -129,8 +127,6 @@ function FilterLink({
   return (
     <a
       href={href}
-      target="_blank"
-      rel="noreferrer"
       className={
         active
           ? "rounded-md bg-teal px-3 py-2 text-sm font-semibold text-white"

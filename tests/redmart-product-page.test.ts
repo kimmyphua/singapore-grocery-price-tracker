@@ -165,4 +165,14 @@ describe("RedMart/Lazada product page parser", () => {
     expect(extractRedMartRenderedPrice(renderedText)).toBe(16.08);
     expect(extractRedMartRenderedSize(renderedText)).toBe("1.42 L");
   });
+
+  it("treats zero browser-rendered prices as missing", () => {
+    const renderedText = `
+      Magnum Mini Almond Multipack Ice Cream 6 x 55ml - Frozen
+      $0.00
+      Promotions
+    `;
+
+    expect(extractRedMartRenderedPrice(renderedText)).toBeUndefined();
+  });
 });

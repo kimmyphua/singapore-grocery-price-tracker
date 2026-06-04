@@ -14,13 +14,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="min-h-screen bg-mist">
           <header className="border-b border-teal/15 bg-white">
             <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-5">
-              <a href="/" target="_blank" rel="noreferrer" className="text-sm font-semibold text-ink">
+              <a href="/" className="text-sm font-semibold text-ink">
                 SG Grocery Tracker
               </a>
               <div className="flex gap-4 text-sm text-slate-600">
-                <a href="/products" target="_blank" rel="noreferrer">Products</a>
-                <a href="/deals" target="_blank" rel="noreferrer">Deals</a>
-                <a href="/admin/promotions" target="_blank" rel="noreferrer">Review</a>
+                <a href="/products">Products</a>
+                <a href="/deals">Deals</a>
+                <a href="/admin/promotions">Review</a>
                 <a
                   href="https://github.com/kimmyphua/singapore-grocery-price-tracker"
                   target="_blank"

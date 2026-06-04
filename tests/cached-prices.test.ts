@@ -197,6 +197,37 @@ describe("cached latest prices", () => {
     ]);
   });
 
+  it("ignores non-positive cached snapshots when selecting latest retailer prices", async () => {
+    const findMany = vi.fn(async () => [
+      snapshotRow({
+        retailerSlug: "redmart",
+        retailerName: "RedMart",
+        price: "0",
+        promotionText: null,
+        capturedAt: "2026-06-04T13:50:30.000Z"
+      }),
+      snapshotRow({
+        retailerSlug: "redmart",
+        retailerName: "RedMart",
+        price: "12.12",
+        promotionText: "Any 2 Save 18%",
+        capturedAt: "2026-06-03T11:40:53.000Z"
+      })
+    ]);
+
+    await expect(
+      getCachedLatestPrices({
+        priceSnapshot: { findMany }
+      })
+    ).resolves.toMatchObject([
+      {
+        retailerSlug: "redmart",
+        price: 12.12,
+        promotionText: "Any 2 Save 18%"
+      }
+    ]);
+  });
+
   it("filters, searches, sorts, and paginates weekly history rows", async () => {
     const findMany = vi.fn(async () => [
       snapshotRow({

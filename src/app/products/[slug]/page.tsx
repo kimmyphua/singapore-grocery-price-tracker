@@ -48,7 +48,7 @@ export default async function ProductDetailPage({
 
   return (
     <div className="space-y-6">
-      <a href="/products" target="_blank" rel="noreferrer" className="text-sm font-medium text-teal">
+      <a href="/products" className="text-sm font-medium text-teal">
         Back to products
       </a>
       <section className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
@@ -371,8 +371,6 @@ function HistorySortLink({
   return (
     <a
       href={getHistoryHref(productSlug, { ...controls, sort, direction, page: 1 })}
-      target="_blank"
-      rel="noreferrer"
       className="text-left transition hover:text-teal"
     >
       {label}
@@ -405,8 +403,6 @@ function HistoryPageLink({
   return (
     <a
       href={getHistoryHref(productSlug, { ...controls, page })}
-      target="_blank"
-      rel="noreferrer"
       className="rounded-md border border-teal/20 px-3 py-2 font-medium text-teal transition hover:bg-meadow/10"
     >
       {children}

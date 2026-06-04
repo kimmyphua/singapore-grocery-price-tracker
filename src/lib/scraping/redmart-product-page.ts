@@ -156,13 +156,13 @@ export function extractRedMartPromotionTextFromApiPayload(
 export function extractRedMartRenderedPrice(pageText: string): number | undefined {
   const priceBlock = pageText.match(/\n\$(\d+(?:\.\d{1,2})?)\n(?:\$\d+(?:\.\d{1,2})\n-\d+%|Only\s+\d+\s+items left|Promotions|Add to cart)/i);
   const visibleSalePrice = priceBlock?.[1] ? Number(priceBlock[1]) : NaN;
-  if (Number.isFinite(visibleSalePrice)) {
+  if (Number.isFinite(visibleSalePrice) && visibleSalePrice > 0) {
     return visibleSalePrice;
   }
 
   const firstPrice = pageText.match(/\$(\d+(?:\.\d{1,2})?)/);
   const parsed = firstPrice?.[1] ? Number(firstPrice[1]) : NaN;
-  return Number.isFinite(parsed) ? parsed : undefined;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 export function extractRedMartRenderedOriginalPrice(pageText: string): number | undefined {

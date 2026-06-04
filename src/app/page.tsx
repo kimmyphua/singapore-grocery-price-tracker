@@ -36,8 +36,6 @@ export default async function DashboardPage() {
             <RefreshButton />
             <a
               href="/products"
-              target="_blank"
-              rel="noreferrer"
               className="inline-flex h-10 items-center justify-center rounded-md border border-teal/30 px-4 text-center text-sm font-semibold text-teal transition hover:bg-teal/10"
             >
               Browse products
@@ -65,8 +63,6 @@ export default async function DashboardPage() {
             <a
               key={product.slug}
               href={`/products/${product.slug}`}
-              target="_blank"
-              rel="noreferrer"
               className="rounded-lg border border-teal/15 bg-white p-4 shadow-sm"
             >
               <div className="flex items-start justify-between gap-3">
@@ -111,8 +107,6 @@ export default async function DashboardPage() {
                   <td className="px-4 py-3">
                     <a
                       href={`/products/${product.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
                       className="font-semibold text-ink"
                     >
                       {product.brand} {product.flavour ?? product.family}
