@@ -102,7 +102,7 @@ describe("cached latest prices", () => {
     );
   });
 
-  it("groups weekly history by Singapore week and keeps the latest retailer snapshot in each week", async () => {
+  it("groups price history by price and promo changes instead of by week", async () => {
     const findMany = vi.fn(async () => [
       snapshotRow({
         retailerSlug: "redmart",
@@ -111,6 +111,14 @@ describe("cached latest prices", () => {
         originalPrice: "13.50",
         promotionText: "Any 3 Save $13.85",
         capturedAt: "2026-06-03T03:00:00.000Z"
+      }),
+      snapshotRow({
+        retailerSlug: "redmart",
+        retailerName: "RedMart",
+        price: "12.12",
+        originalPrice: "13.50",
+        promotionText: "Any 3 Save $13.85",
+        capturedAt: "2026-06-02T03:00:00.000Z"
       }),
       snapshotRow({
         retailerSlug: "redmart",
@@ -144,26 +152,32 @@ describe("cached latest prices", () => {
       page: 1,
       pageSize: 10,
       totalPages: 1,
-      totalRows: 3,
+      totalRows: 4,
       rows: [
         {
           retailerSlug: "redmart",
           price: 12.12,
           originalPrice: 13.5,
           promotionText: "Any 3 Save $13.85",
-          weekStart: "2026-06-01",
+          date: "2026-06-03",
           capturedAt: "2026-06-03T03:00:00.000Z"
         },
         {
           retailerSlug: "fairprice",
           price: 12.11,
           effectivePrice: 9.9,
-          weekStart: "2026-06-01"
+          date: "2026-06-02"
+        },
+        {
+          retailerSlug: "redmart",
+          price: 12.5,
+          promotionText: null,
+          date: "2026-06-01"
         },
         {
           retailerSlug: "redmart",
           price: 12.15,
-          weekStart: "2026-05-25",
+          date: "2026-05-28",
           capturedAt: "2026-05-28T08:00:00.000Z"
         }
       ]
@@ -228,7 +242,7 @@ describe("cached latest prices", () => {
     ]);
   });
 
-  it("filters, searches, sorts, and paginates weekly history rows", async () => {
+  it("filters, searches, sorts, and paginates price history rows", async () => {
     const findMany = vi.fn(async () => [
       snapshotRow({
         retailerSlug: "redmart",

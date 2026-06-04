@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import type {
   LatestPrice,
-  WeeklyPriceHistory,
+  PriceHistory,
   WeeklyPriceHistoryResult,
   WeeklyPriceHistorySort
 } from "@/lib/data/seed-data";
@@ -118,19 +118,19 @@ export async function getCachedWeeklyPriceHistory(
       }
     });
 
-    const weeklyRows = [...rows]
+    const historyRows = [...rows]
       .sort((left, right) => getTimestamp(right.capturedAt) - getTimestamp(left.capturedAt))
       .filter((row) => row.retailerListing.canonicalProduct)
       .filter(hasPositiveSnapshotPrice)
-      .filter(isLatestRetailerProductWeekRow)
+      .filter(isRetailerProductChangeRow)
       .map((row) => ({
         ...mapCachedPriceRow(row),
-        weekStart: getSingaporeWeekStart(row.capturedAt)
+        date: getSingaporeDate(row.capturedAt)
       }))
       .filter((row) => matchesWeeklyHistoryFilters(row, options))
       .sort((left, right) => compareWeeklyHistoryRows(left, right, options));
 
-    return paginateWeeklyHistory(weeklyRows, options);
+    return paginateWeeklyHistory(historyRows, options);
   } catch {
     return paginateWeeklyHistory([], options);
   }
@@ -156,23 +156,40 @@ function isLatestRetailerProductRow(
   );
 }
 
-function isLatestRetailerProductWeekRow(
+function isRetailerProductChangeRow(
   row: CachedPriceRow,
   index: number,
   rows: CachedPriceRow[]
 ) {
   const productSlug = row.retailerListing.canonicalProduct?.slug;
   const retailerSlug = row.retailerListing.retailer.slug;
-  const weekStart = getSingaporeWeekStart(row.capturedAt);
-
-  return (
-    rows.findIndex(
+  const newerRow = rows
+    .slice(0, index)
+    .find(
       (candidate) =>
         candidate.retailerListing.canonicalProduct?.slug === productSlug &&
-        candidate.retailerListing.retailer.slug === retailerSlug &&
-        getSingaporeWeekStart(candidate.capturedAt) === weekStart
-    ) === index
+        candidate.retailerListing.retailer.slug === retailerSlug
+    );
+
+  return (
+    !newerRow ||
+    getPriceHistorySignature(row) !== getPriceHistorySignature(newerRow)
   );
+}
+
+function getPriceHistorySignature(row: CachedPriceRow) {
+  return [
+    toNumber(row.price).toFixed(4),
+    row.originalPrice === null || row.originalPrice === undefined
+      ? ""
+      : toNumber(row.originalPrice).toFixed(4),
+    normalizePromotionText(row.promotionText),
+    row.isAvailable ? "available" : "unavailable"
+  ].join("|");
+}
+
+function normalizePromotionText(value: string | null) {
+  return value?.trim().replace(/\s+/g, " ").toLowerCase() ?? "";
 }
 
 function mapCachedPriceRow(row: CachedPriceRow): LatestPrice {
@@ -236,20 +253,11 @@ function toNumber(value: unknown): number {
   return Number(value);
 }
 
-function getSingaporeWeekStart(value: Date | string): string {
+function getSingaporeDate(value: Date | string): string {
   const date = value instanceof Date ? value : new Date(value);
   const singaporeDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  const day = singaporeDate.getUTCDay();
-  const daysSinceMonday = day === 0 ? 6 : day - 1;
-  const monday = new Date(
-    Date.UTC(
-      singaporeDate.getUTCFullYear(),
-      singaporeDate.getUTCMonth(),
-      singaporeDate.getUTCDate() - daysSinceMonday
-    )
-  );
 
-  return monday.toISOString().slice(0, 10);
+  return singaporeDate.toISOString().slice(0, 10);
 }
 
 function getTimestamp(value: Date | string) {
@@ -257,7 +265,7 @@ function getTimestamp(value: Date | string) {
 }
 
 function matchesWeeklyHistoryFilters(
-  row: WeeklyPriceHistory,
+  row: PriceHistory,
   options: WeeklyPriceHistoryOptions
 ) {
   if (options.retailerSlug && row.retailerSlug !== options.retailerSlug) {
@@ -269,19 +277,19 @@ function matchesWeeklyHistoryFilters(
     return true;
   }
 
-  return [row.retailerName, row.retailerSlug, row.promotionText ?? "", row.weekStart]
+  return [row.retailerName, row.retailerSlug, row.promotionText ?? "", row.date]
     .join(" ")
     .toLowerCase()
     .includes(query);
 }
 
 function compareWeeklyHistoryRows(
-  left: WeeklyPriceHistory,
-  right: WeeklyPriceHistory,
+  left: PriceHistory,
+  right: PriceHistory,
   options: WeeklyPriceHistoryOptions
 ) {
   const direction = options.direction === "asc" ? 1 : -1;
-  const sort = options.sort ?? "week";
+  const sort = options.sort ?? "date";
   const comparison = compareBySort(left, right, sort);
 
   return comparison === 0
@@ -290,8 +298,8 @@ function compareWeeklyHistoryRows(
 }
 
 function compareBySort(
-  left: WeeklyPriceHistory,
-  right: WeeklyPriceHistory,
+  left: PriceHistory,
+  right: PriceHistory,
   sort: WeeklyPriceHistorySort
 ) {
   if (sort === "retailer") {
@@ -310,10 +318,10 @@ function compareBySort(
     return compareNullableNumbers(left.effectiveUnitPrice, right.effectiveUnitPrice);
   }
 
-  return left.weekStart.localeCompare(right.weekStart) || getTimestamp(left.capturedAt) - getTimestamp(right.capturedAt);
+  return left.date.localeCompare(right.date) || getTimestamp(left.capturedAt) - getTimestamp(right.capturedAt);
 }
 
-function getDisplayedOriginalPrice(row: WeeklyPriceHistory) {
+function getDisplayedOriginalPrice(row: PriceHistory) {
   return row.originalPrice ?? row.price;
 }
 
@@ -322,7 +330,7 @@ function compareNullableNumbers(left: number | null, right: number | null) {
 }
 
 function paginateWeeklyHistory(
-  rows: WeeklyPriceHistory[],
+  rows: PriceHistory[],
   options: WeeklyPriceHistoryOptions
 ): WeeklyPriceHistoryResult {
   const pageSize = clampInteger(options.pageSize, 10, 1, 50);

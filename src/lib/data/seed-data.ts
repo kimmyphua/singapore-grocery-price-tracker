@@ -32,11 +32,12 @@ export type LatestPrice = {
   source: "live-product-page" | "cached-price-snapshot";
 };
 
-export type WeeklyPriceHistory = LatestPrice & {
-  weekStart: string;
+export type PriceHistory = LatestPrice & {
+  date: string;
 };
 
 export type WeeklyPriceHistorySort =
+  | "date"
   | "week"
   | "retailer"
   | "shelfPrice"
@@ -44,7 +45,7 @@ export type WeeklyPriceHistorySort =
   | "unitValue";
 
 export type WeeklyPriceHistoryResult = {
-  rows: WeeklyPriceHistory[];
+  rows: PriceHistory[];
   totalRows: number;
   page: number;
   pageSize: number;

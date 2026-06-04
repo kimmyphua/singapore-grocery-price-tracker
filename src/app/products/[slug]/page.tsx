@@ -1,5 +1,5 @@
 import { products, retailers } from "@/lib/data/seed-data";
-import type { LatestPrice, WeeklyPriceHistory, WeeklyPriceHistorySort } from "@/lib/data/seed-data";
+import type { LatestPrice, PriceHistory, WeeklyPriceHistorySort } from "@/lib/data/seed-data";
 import { getCachedLatestPrices, getCachedWeeklyPriceHistory } from "@/lib/pricing/cached-prices";
 import { notFound } from "next/navigation";
 import { RefreshButton } from "@/app/refresh-button";
@@ -149,7 +149,7 @@ export default async function ProductDetailPage({
           <div>
             <h2 className="font-semibold text-ink">Price history</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Latest saved snapshot per retailer for each Singapore week.
+              Saved rows are added when a retailer price or promotion changes.
             </p>
           </div>
           <form className="grid gap-2 sm:grid-cols-[150px_220px_auto]" action={`/products/${product.slug}`}>
@@ -183,14 +183,14 @@ export default async function ProductDetailPage({
         </div>
         {priceHistory.totalRows === 0 ? (
           <p className="mt-2 text-sm text-slate-600">
-            No weekly history rows match these filters yet.
+            No price history rows match these filters yet.
           </p>
         ) : (
           <>
             <div className="mt-4 overflow-x-auto">
             <div className="min-w-[720px] divide-y divide-teal/10 text-sm">
               <div className="grid grid-cols-[1.1fr_1fr_0.8fr_0.9fr_0.9fr_1.4fr] gap-3 pb-2 text-xs font-semibold uppercase text-slate-500">
-                <HistorySortLink controls={historyControls} productSlug={product.slug} label="Week" sort="week" />
+                <HistorySortLink controls={historyControls} productSlug={product.slug} label="Date" sort="date" />
                 <HistorySortLink controls={historyControls} productSlug={product.slug} label="Retailer" sort="retailer" />
                 <HistorySortLink controls={historyControls} productSlug={product.slug} label="Original" sort="shelfPrice" />
                 <HistorySortLink controls={historyControls} productSlug={product.slug} label="Deal" sort="dealPrice" />
@@ -199,11 +199,11 @@ export default async function ProductDetailPage({
               </div>
               {priceHistory.rows.map((price) => (
                 <div
-                  key={`${price.productSlug}-${price.retailerSlug}-${price.weekStart}`}
+                  key={`${price.productSlug}-${price.retailerSlug}-${price.capturedAt}-${price.price}-${price.promotionText ?? ""}`}
                   className="grid grid-cols-[1.1fr_1fr_0.8fr_0.9fr_0.9fr_1.4fr] gap-3 py-3 text-slate-700"
                 >
                   <div>
-                    <div className="font-medium text-ink">{formatWeek(price.weekStart)}</div>
+                    <div className="font-medium text-ink">{formatHistoryDate(price.date)}</div>
                     <div className="mt-1 text-xs text-slate-500">
                       {formatCapturedDate(price.capturedAt)}
                     </div>
@@ -225,7 +225,7 @@ export default async function ProductDetailPage({
               <div>
                 Showing {getPageStart(priceHistory.page, priceHistory.pageSize)}-
                 {getPageEnd(priceHistory.page, priceHistory.pageSize, priceHistory.totalRows)} of{" "}
-                {priceHistory.totalRows} weekly rows
+                {priceHistory.totalRows} history rows
               </div>
               <div className="flex gap-2">
                 <HistoryPageLink
@@ -286,8 +286,8 @@ function formatDealPrice(price: Pick<LatestPrice, "effectivePrice" | "dealQuanti
   return `$${price.effectivePrice.toFixed(2)}${price.dealQuantity > 1 ? ` x ${price.dealQuantity}` : ""}`;
 }
 
-function formatWeek(weekStart: WeeklyPriceHistory["weekStart"]) {
-  return `Week of ${formatDate(weekStart)}`;
+function formatHistoryDate(date: PriceHistory["date"]) {
+  return formatDate(date);
 }
 
 function formatCapturedDate(capturedAt: string) {
@@ -337,6 +337,8 @@ function getRetailerSlug(value: string | undefined) {
 
 function getHistorySort(value: string | undefined): WeeklyPriceHistorySort {
   if (
+    value === "date" ||
+    value === "week" ||
     value === "retailer" ||
     value === "shelfPrice" ||
     value === "dealPrice" ||
@@ -345,7 +347,7 @@ function getHistorySort(value: string | undefined): WeeklyPriceHistorySort {
     return value;
   }
 
-  return "week";
+  return "date";
 }
 
 function getPositiveInteger(value: string | undefined, fallback: number) {
@@ -419,7 +421,7 @@ function getHistoryHref(productSlug: string, controls: HistoryControls) {
   if (controls.query) {
     params.set("historyQuery", controls.query);
   }
-  if (controls.sort !== "week") {
+  if (controls.sort !== "date") {
     params.set("historySort", controls.sort);
   }
   if (controls.direction !== "desc") {
