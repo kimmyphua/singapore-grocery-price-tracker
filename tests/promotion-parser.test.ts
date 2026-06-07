@@ -1,7 +1,27 @@
-import { describe, expect, it } from "vitest";
-import { extractPromotionDealsFromPages, parsePromotionAsset } from "@/lib/promotions/parser";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createTesseractWorker,
+  extractPromotionDealsFromPages,
+  parsePromotionAsset
+} from "@/lib/promotions/parser";
 
 describe("weekly promotion parser", () => {
+  it("starts Tesseract with the packaged Node worker path", async () => {
+    const worker = { recognize: vi.fn(), terminate: vi.fn() };
+    const createWorker = vi.fn(async () => worker);
+
+    await expect(createTesseractWorker(createWorker)).resolves.toBe(worker);
+    expect(createWorker).toHaveBeenCalledWith(
+      "eng",
+      1,
+      expect.objectContaining({
+        workerPath: expect.stringContaining(
+          "node_modules/tesseract.js/src/worker-script/node/index.js"
+        )
+      })
+    );
+  });
+
   it("extracts snack and ice cream deals with price and promo text", () => {
     const deals = extractPromotionDealsFromPages([
       {

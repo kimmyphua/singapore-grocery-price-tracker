@@ -1,3 +1,4 @@
+import path from "node:path";
 import type {
   ExtractedPromotionDeal,
   PromotionAssetKind,
@@ -330,7 +331,7 @@ async function recognizeImagePage(bytes: Buffer): Promise<Omit<PromotionTextPage
   const tesseract = await loadRuntimeModule<any>("tesseract.js");
   const createWorker = tesseract.createWorker ?? tesseract.default?.createWorker;
   if (typeof createWorker === "function") {
-    const worker = await createWorker("eng");
+    const worker = await createTesseractWorker(createWorker);
     try {
       const result = await worker.recognize(bytes, {}, { tsv: true });
       return {
@@ -348,6 +349,26 @@ async function recognizeImagePage(bytes: Buffer): Promise<Omit<PromotionTextPage
   }
   const result = await recognize(bytes, "eng");
   return { text: result.data.text };
+}
+
+export function createTesseractWorker(
+  createWorker: (
+    langs: string,
+    oem: number,
+    options: { workerPath: string }
+  ) => Promise<any>
+) {
+  return createWorker("eng", 1, {
+    workerPath: path.join(
+      process.cwd(),
+      "node_modules",
+      "tesseract.js",
+      "src",
+      "worker-script",
+      "node",
+      "index.js"
+    )
+  });
 }
 
 function parseTesseractTsv(tsv: string | null | undefined): PromotionTextItem[] {
