@@ -3,6 +3,7 @@ import { refreshWeeklyPromotions } from "@/lib/promotions/refresh-promotions";
 import type { PromotionRetailerSlug } from "@/lib/promotions/types";
 
 export const runtime = "nodejs";
+export const preferredRegion = "hnd1";
 
 const RETAILER_SLUGS = new Set(["fairprice", "giant", "sheng-siong", "cold-storage"]);
 
