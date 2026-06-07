@@ -5,7 +5,12 @@ const nextConfig = {
       "/api/promotions/refresh": [
         "./node_modules/@napi-rs/canvas*/**/*",
         "./node_modules/tesseract.js/src/**/*",
-        "./node_modules/tesseract.js-core/**/*"
+        "./node_modules/tesseract.js-core/**/*",
+        "./node_modules/regenerator-runtime/**/*",
+        "./node_modules/is-url/**/*",
+        "./node_modules/wasm-feature-detect/**/*",
+        "./node_modules/bmp-js/**/*",
+        "./node_modules/node-fetch/**/*"
       ]
     },
     serverComponentsExternalPackages: ["@napi-rs/canvas"]
