@@ -156,8 +156,10 @@ async function discoverGiant(
 ): Promise<PromotionSource[]> {
   const html = await fetchText(fetcher, GIANT_URL);
   const heading = getHeading(html);
-  const pdfUrl = findGiantSuperSavingsPdf(html);
   const dates = findGiantActiveSuperSavingsRange(html, now);
+  const pdfUrl = dates
+    ? findGiantSuperSavingsPdf(html, dates.validFrom)
+    : null;
   if (!pdfUrl || !dates) {
     return [];
   }
@@ -179,26 +181,33 @@ async function discoverGiant(
 }
 
 async function discoverShengSiong(
-  fetcher: PromotionFetch
+  fetcher: PromotionFetch,
+  now: Date
 ): Promise<PromotionSource[]> {
   const listingHtml = await fetchText(fetcher, SHENG_SIONG_URL);
   const $ = cheerio.load(listingHtml);
-  const postUrls = unique(
+  const postCandidates = unique(
     [...$("article a").toArray(), ...$("a").toArray()]
       .map((element) => $(element).attr("href"))
       .filter(isShengSiongPostHref)
       .map((href) => new URL(href, SHENG_SIONG_URL).toString())
-  ).slice(0, 3);
+  )
+    .slice(0, 10)
+    .flatMap((postUrl) => {
+      const dates = parseShengSiongPostUrlDates(postUrl);
+      return dates && isDateActive(dates, now) ? [{ postUrl, dates }] : [];
+    })
+    .slice(0, 3);
 
   const sources: PromotionSource[] = [];
-  for (const postUrl of postUrls) {
+  for (const { postUrl, dates: candidateDates } of postCandidates) {
     const postHtml = await fetchText(fetcher, postUrl);
     const pdfUrl = findPdfUrl(postHtml, postUrl);
     const title = getHeading(postHtml);
     const dates = title
       ? tryParsePromotionDateRange(`${title} ${postUrl}`)
-      : tryParsePromotionDateRange(postUrl);
-    if (!pdfUrl || !title || !dates) {
+      : candidateDates;
+    if (!pdfUrl || !title || !dates || !isDateActive(dates, now)) {
       continue;
     }
 
@@ -217,6 +226,28 @@ async function discoverShengSiong(
   }
 
   return sources;
+}
+
+function parseShengSiongPostUrlDates(value: string) {
+  const path = decodeURIComponent(new URL(value).pathname);
+  const match = path.match(
+    /(\d{1,2})-(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*-(\d{4}).*?(\d{1,2})-(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*-(\d{4})/i
+  );
+  return match
+    ? tryParsePromotionDateRange(
+        `${match[1]} ${match[2]} ${match[3]} - ${match[4]} ${match[5]} ${match[6]}`
+      )
+    : null;
+}
+
+function isDateActive(
+  dates: { validFrom: Date; validTo: Date },
+  now: Date
+) {
+  return (
+    dates.validFrom.getTime() <= now.getTime() &&
+    now.getTime() <= dates.validTo.getTime()
+  );
 }
 
 function isShengSiongPostHref(href: string | undefined): href is string {
@@ -384,18 +415,63 @@ function getHeading(html: string) {
   return $("h1").first().text().trim() || null;
 }
 
-function findGiantSuperSavingsPdf(html: string) {
+function findGiantSuperSavingsPdf(html: string, validFrom: Date) {
   const $ = cheerio.load(html);
-  const href = $("a")
-    .toArray()
-    .map((anchor) => $(anchor).attr("href"))
-    .find(
-      (candidate) =>
-        candidate &&
-        /\.pdf(?:$|\?)/i.test(candidate) &&
-        /super.?savings|\bgss\b/i.test(candidate)
+  const candidates = unique(
+    $("a")
+      .toArray()
+      .map((anchor) => $(anchor).attr("href"))
+      .filter(
+        (candidate): candidate is string =>
+          typeof candidate === "string" &&
+          /\.pdf(?:$|\?)/i.test(candidate) &&
+          /super.?savings|\bgss\b/i.test(candidate)
+      )
+      .map((href) => new URL(decodeHtml(href), GIANT_URL).toString())
+  );
+  const start = singaporeMonthDay(validFrom);
+  const matching = candidates.filter((candidate) => {
+    const filenameDate = parseFilenameMonthDay(candidate);
+    return (
+      filenameDate?.day === start.day &&
+      filenameDate.month === start.month
     );
-  return href ? new URL(decodeHtml(href), GIANT_URL).toString() : null;
+  });
+
+  if (candidates.length === 1) {
+    const filenameDate = parseFilenameMonthDay(candidates[0]);
+    return !filenameDate || matching.length === 1 ? candidates[0] : null;
+  }
+
+  return matching.length === 1 ? matching[0] : null;
+}
+
+function parseFilenameMonthDay(value: string) {
+  const filename = new URL(value).pathname.split("/").at(-1) ?? "";
+  const match = filename.match(
+    /(?:^|[^0-9])(\d{1,2})(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i
+  );
+  if (!match) {
+    return null;
+  }
+
+  return {
+    day: Number(match[1]),
+    month: match[2].slice(0, 3).toLowerCase()
+  };
+}
+
+function singaporeMonthDay(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-SG", {
+    timeZone: "Asia/Singapore",
+    month: "short",
+    day: "numeric"
+  }).formatToParts(value);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    day: Number(values.day),
+    month: values.month.slice(0, 3).toLowerCase()
+  };
 }
 
 function findGiantActiveSuperSavingsRange(html: string, now: Date) {

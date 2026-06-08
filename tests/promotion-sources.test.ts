@@ -39,8 +39,12 @@ async function promotionPages() {
       await fixture("sheng-siong-post.html")
     ],
     [
-      "https://corporate.shengsiong.com.sg/weekend-special-28-may-2026-31-may-2026/",
+      "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/",
       await fixture("sheng-siong-post-weekend.html")
+    ],
+    [
+      "https://corporate.shengsiong.com.sg/weekend-special-11-jun-2026-14-jun-2026/",
+      await fixture("sheng-siong-post-future.html")
     ],
     [
       "https://coldstorage.com.sg/weekly-ads",
@@ -145,12 +149,12 @@ describe("promotion source discovery", () => {
         expect.objectContaining({
           seriesKey: "sheng-siong-newspaper-advertisement",
           publicationKey:
-            "sheng-siong-newspaper-advertisement:2026-05-27T16:00:00.000Z:4-days-special-28-may-2026-31-may-2026",
+            "sheng-siong-newspaper-advertisement:2026-06-03T16:00:00.000Z:weekly-special-4-jun-2026-10-jun-2026",
           retailerSlug: "sheng-siong",
           parserKind: "document",
           pageNumber: 1,
-          validFrom: new Date("2026-05-27T16:00:00.000Z"),
-          validTo: new Date("2026-05-31T15:59:59.999Z")
+          validFrom,
+          validTo
         }),
         expect.objectContaining({
           seriesKey: "cold-storage-grocery-selections",
@@ -368,47 +372,45 @@ describe("promotion source discovery", () => {
     expect(result).toEqual({ sources: [], failures: [] });
   });
 
-  it("ignores Sheng Siong navigation noise before dated article links", async () => {
+  it("ignores navigation and emits only the current Sheng Siong post", async () => {
     const pages = await promotionPages();
     const requests: string[] = [];
 
     const result = await discoverPromotionSources({
       fetcher: createFetcher(pages, requests),
-      retailerSlug: "sheng-siong"
+      retailerSlug: "sheng-siong",
+      now: new Date("2026-06-08T04:00:00.000Z")
     });
 
     expect(result.failures).toEqual([]);
-    expect(result.sources).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          sourceUrl:
-            "https://corporate.shengsiong.com.sg/4-days-special-28-may-2026-31-may-2026/"
-        }),
-        expect.objectContaining({
-          sourceUrl:
-            "https://corporate.shengsiong.com.sg/weekend-special-28-may-2026-31-may-2026/"
-        })
-      ])
-    );
-    expect(result.sources).toHaveLength(2);
+    expect(result.sources).toEqual([
+      expect.objectContaining({
+        sourceUrl:
+          "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/"
+      })
+    ]);
     expect(requests).toEqual([
       "https://corporate.shengsiong.com.sg/category/promotions/newspaper-advertisement/",
-      "https://corporate.shengsiong.com.sg/4-days-special-28-may-2026-31-may-2026/",
-      "https://corporate.shengsiong.com.sg/weekend-special-28-may-2026-31-may-2026/"
+      "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/"
     ]);
   });
 
-  it("uses the Sheng Siong post slug to distinguish same-date publications", async () => {
+  it("treats stale and future Sheng Siong posts as a successful empty result", async () => {
     const pages = await promotionPages();
+    pages.delete(
+      "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/"
+    );
+    pages.set(
+      "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/",
+      "<html><body><p>No flyer asset.</p></body></html>"
+    );
 
     const result = await discoverPromotionSources({
       fetcher: createFetcher(pages),
-      retailerSlug: "sheng-siong"
+      retailerSlug: "sheng-siong",
+      now: new Date("2026-06-08T04:00:00.000Z")
     });
 
-    expect(result.sources.map((source) => source.publicationKey)).toEqual([
-      "sheng-siong-newspaper-advertisement:2026-05-27T16:00:00.000Z:4-days-special-28-may-2026-31-may-2026",
-      "sheng-siong-newspaper-advertisement:2026-05-27T16:00:00.000Z:weekend-special-28-may-2026-31-may-2026"
-    ]);
+    expect(result).toEqual({ sources: [], failures: [] });
   });
 });
