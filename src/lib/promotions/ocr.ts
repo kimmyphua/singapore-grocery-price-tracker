@@ -30,7 +30,7 @@ export type PromotionImage = {
 
 type RecognizedImage = Omit<PromotionTextPage, "pageNumber">;
 
-type PromotionOcrDeps = {
+export type PromotionOcrDeps = {
   loadImage?: (bytes: Buffer) => Promise<PromotionImage>;
   findFairPriceCardRegions?: (
     image: PromotionImage
@@ -40,6 +40,10 @@ type PromotionOcrDeps = {
     region: FairPriceCardRegion
   ) => Promise<Buffer>;
   recognizeImage?: (bytes: Buffer) => Promise<RecognizedImage>;
+  onRegionFailure?: (failure: {
+    regionId: string;
+    error: Error;
+  }) => void;
 };
 
 export async function extractTextPages(
@@ -133,11 +137,14 @@ async function recognizeFairPriceGrid(
   const findRegions =
     deps.findFairPriceCardRegions ?? findFairPriceCardRegions;
   const cropImage = deps.cropImage ?? defaultCropImage;
+  const regions = findRegions(image);
+  if (regions.length === 0) {
+    throw new Error("FairPrice flyer card regions were not detected");
+  }
   const recognizer = deps.recognizeImage
     ? null
     : await createImageRecognizer();
   const recognizeImage = deps.recognizeImage ?? recognizer!.recognize;
-  const regions = findRegions(image);
   const textParts: string[] = [];
   const items: PromotionTextItem[] = [];
 
@@ -157,8 +164,12 @@ async function recognizeFairPriceGrid(
             regionId: region.regionId
           });
         }
-      } catch {
-        // One unreadable card must not discard other card or page results.
+      } catch (error) {
+        deps.onRegionFailure?.({
+          regionId: region.regionId,
+          error:
+            error instanceof Error ? error : new Error(String(error))
+        });
       }
     }
   } finally {
@@ -192,6 +203,13 @@ export function findFairPriceCardRegions(
 
   const clusteredRows = clusterBadgeRows(badges, image.height);
   const columns = getEstablishedBadgeColumns(clusteredRows, image.width);
+  const sparseMaxWidth =
+    columns.length === 0
+      ? getSparseMaximumCardWidth(clusteredRows, image.width)
+      : null;
+  if (columns.length === 0 && sparseMaxWidth === null) {
+    return [];
+  }
   const rows: BadgeRow[] =
     columns.length > 0
       ? getRowsAlignedToColumns(clusteredRows, columns, image.width)
@@ -228,7 +246,8 @@ export function findFairPriceCardRegions(
           ? getSparseRowColumnBounds(
               sorted,
               columnIndex,
-              image.width
+              image.width,
+              sparseMaxWidth!
             )
           : getEstablishedColumnBounds(
               columns,
@@ -398,7 +417,8 @@ function getEstablishedColumnBounds(
 function getSparseRowColumnBounds(
   row: BadgeBounds[],
   columnIndex: number,
-  imageWidth: number
+  imageWidth: number,
+  maximumWidth: number
 ) {
   const center = getBadgeCenter(row[columnIndex]);
   const previousCenter =
@@ -407,13 +427,48 @@ function getSparseRowColumnBounds(
     columnIndex === row.length - 1
       ? imageWidth
       : getBadgeCenter(row[columnIndex + 1]);
+  const midpointLeft = Math.round((previousCenter + center) / 2);
+  const midpointRight = Math.round((center + nextCenter) / 2);
   return {
-    left: Math.max(0, Math.round((previousCenter + center) / 2)),
+    left: Math.max(
+      0,
+      midpointLeft,
+      Math.round(center - maximumWidth / 2)
+    ),
     right: Math.min(
       imageWidth,
-      Math.round((center + nextCenter) / 2)
+      midpointRight,
+      Math.round(center + maximumWidth / 2)
     )
   };
+}
+
+function getSparseMaximumCardWidth(
+  rows: BadgeBounds[][],
+  imageWidth: number
+) {
+  const centers = rows
+    .flat()
+    .map(getBadgeCenter)
+    .sort((left, right) => left - right);
+  const distinctCenters = centers.filter(
+    (center, index) =>
+      index === 0 || center - centers[index - 1] > imageWidth * 0.04
+  );
+  if (distinctCenters.length < 2) {
+    return null;
+  }
+
+  const spacings = distinctCenters
+    .slice(1)
+    .map((center, index) => center - distinctCenters[index])
+    .sort((left, right) => left - right);
+  const medianSpacing =
+    spacings[Math.floor(spacings.length / 2)];
+  return Math.max(
+    1,
+    Math.round(Math.min(imageWidth * 0.4, medianSpacing * 0.8))
+  );
 }
 
 function findBlueBadgeBounds(

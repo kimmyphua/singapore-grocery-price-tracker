@@ -351,7 +351,9 @@ function extractImageGridPromotionDeals(page: PromotionTextPage): ExtractedPromo
     return [];
   }
 
-  const items = dedupePositionedItems(page.items);
+  const items = assembleImageGridPromotionPhrases(
+    dedupePositionedItems(page.items)
+  );
   const dealsByCard = new Map<string, ExtractedPromotionDeal>();
   const seenTitles = new Set<string>();
 
@@ -397,7 +399,7 @@ function extractImageGridPromotionDeals(page: PromotionTextPage): ExtractedPromo
       sourceY: box.y,
       sourceWidth: box.width,
       sourceHeight: box.height,
-      confidence: priceText && promoText ? 0.72 : 0.62
+      confidence: priceText || promoText ? 0.72 : 0.62
     };
     const cardKey = `${Math.round(box.x / 20)}:${Math.round(box.y / 20)}`;
     const existing = dealsByCard.get(cardKey);
@@ -407,6 +409,78 @@ function extractImageGridPromotionDeals(page: PromotionTextPage): ExtractedPromo
   }
 
   return [...dealsByCard.values()];
+}
+
+function assembleImageGridPromotionPhrases(
+  items: PromotionTextItem[]
+) {
+  const sorted = [...items].sort(sortPositionedItems);
+  const consumed = new Set<PromotionTextItem>();
+  const phrases: PromotionTextItem[] = [];
+
+  for (let index = 0; index < sorted.length; index += 1) {
+    if (consumed.has(sorted[index])) {
+      continue;
+    }
+    for (const length of [5, 2]) {
+      const candidates = sorted.slice(index, index + length);
+      if (
+        candidates.length !== length ||
+        candidates.some((item) => consumed.has(item)) ||
+        !areAdjacentPromotionTokens(candidates)
+      ) {
+        continue;
+      }
+      const phrase = candidates.map((item) => item.str).join(" ");
+      if (
+        !/^(?:\d+\s+FOR|ANY\s+\d+|BUY\s+\d+\s+GET\s+\d+\s+FREE)$/i.test(
+          phrase
+        )
+      ) {
+        continue;
+      }
+
+      candidates.forEach((item) => consumed.add(item));
+      phrases.push({
+        str: phrase,
+        x: candidates[0].x,
+        y: Math.min(...candidates.map((item) => item.y)),
+        width:
+          Math.max(
+            ...candidates.map(
+              (item) => item.x + (item.width ?? 0)
+            )
+          ) - candidates[0].x,
+        height: Math.max(
+          ...candidates.map((item) => item.height ?? 0)
+        ),
+        regionId: candidates[0].regionId
+      });
+      break;
+    }
+  }
+
+  return [
+    ...items.filter((item) => !consumed.has(item)),
+    ...phrases
+  ];
+}
+
+function areAdjacentPromotionTokens(items: PromotionTextItem[]) {
+  return items.every((item, index) => {
+    if (index === 0) {
+      return true;
+    }
+    const previous = items[index - 1];
+    const sameRegion = item.regionId === previous.regionId;
+    const sameLine =
+      Math.abs(item.y - previous.y) <=
+      Math.max(item.height ?? 0, previous.height ?? 0, 6);
+    const gap =
+      item.x -
+      (previous.x + (previous.width ?? 0));
+    return sameRegion && sameLine && gap >= -2 && gap <= 20;
+  });
 }
 
 function getImageGridCardItems(items: PromotionTextItem[], anchor: PromotionTextItem) {

@@ -381,6 +381,46 @@ describe("weekly promotion parser", () => {
     expect(deals).toEqual([]);
   });
 
+  it("assembles multi-token promotions only within one FairPrice region", () => {
+    const deals = extractPromotionDealsFromPages([
+      {
+        pageNumber: 1,
+        text: "",
+        items: [
+          { str: "ANY", x: 20, y: 20, width: 30, regionId: "card-1" },
+          { str: "3", x: 54, y: 20, width: 10, regionId: "card-1" },
+          { str: "LAYS", x: 20, y: 80, width: 36, regionId: "card-1" },
+          { str: "Potato", x: 20, y: 100, width: 45, regionId: "card-1" },
+          { str: "Chips", x: 69, y: 100, width: 36, regionId: "card-1" },
+          { str: "BUY", x: 220, y: 20, width: 30, regionId: "card-2" },
+          { str: "1", x: 254, y: 20, width: 10, regionId: "card-2" },
+          { str: "GET", x: 268, y: 20, width: 30, regionId: "card-2" },
+          { str: "1", x: 302, y: 20, width: 10, regionId: "card-2" },
+          { str: "FREE", x: 316, y: 20, width: 38, regionId: "card-2" },
+          { str: "MAGNUM", x: 220, y: 80, width: 60, regionId: "card-2" },
+          { str: "Ice", x: 220, y: 100, width: 22, regionId: "card-2" },
+          { str: "Cream", x: 246, y: 100, width: 42, regionId: "card-2" },
+          { str: "2", x: 420, y: 20, width: 10, regionId: "card-3" },
+          { str: "FOR", x: 520, y: 20, width: 28, regionId: "card-3" },
+          { str: "Pocky", x: 420, y: 80, width: 42, regionId: "card-3" },
+          { str: "Snack", x: 420, y: 100, width: 40, regionId: "card-3" },
+          { str: "ANY", x: 20, y: 200, width: 30, regionId: "card-4" },
+          { str: "3", x: 54, y: 200, width: 10, regionId: "card-5" },
+          { str: "Pocky", x: 20, y: 260, width: 42, regionId: "card-4" },
+          { str: "Snack", x: 20, y: 280, width: 40, regionId: "card-4" }
+        ]
+      }
+    ]);
+
+    expect(deals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rawTitle: expect.stringContaining("LAYS"), promoText: "ANY 3" }),
+        expect.objectContaining({ rawTitle: expect.stringContaining("MAGNUM"), promoText: "BUY 1 GET 1 FREE" })
+      ])
+    );
+    expect(deals.some((deal) => deal.rawTitle.includes("Pocky"))).toBe(false);
+  });
+
   it("accepts only readable, complete, high-confidence candidates", () => {
     expect(
       isTrustworthyPromotionDeal({

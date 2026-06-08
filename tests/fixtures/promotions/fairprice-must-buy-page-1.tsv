@@ -1,16 +1,18 @@
 level	page_num	block_num	par_num	line_num	word_num	left	top	width	height	conf	text	region_id
-5	1	1	1	1	1	925	480	50	24	96	3 FOR	card-r1-c3
-5	1	1	1	1	2	930	505	72	42	96	2250	card-r1-c3
-5	1	1	1	2	1	918	566	72	18	95	MAGNUM	card-r1-c3
-5	1	1	1	2	2	918	588	78	18	95	Multipack	card-r1-c3
-5	1	1	1	2	3	1000	588	42	18	94	Mini	card-r1-c3
-5	1	1	1	3	1	918	610	70	18	95	Assorted	card-r1-c3
-5	1	1	1	3	2	992	610	52	18	96	3s-6s	card-r1-c3
-5	1	2	1	1	1	55	1105	50	24	96	2 FOR	card-r3-c1
-5	1	2	1	1	2	60	1130	58	42	96	300	card-r3-c1
-5	1	2	1	2	1	54	1190	46	18	96	LAYS	card-r3-c1
-5	1	2	1	2	2	54	1212	66	18	95	RUFFLES	card-r3-c1
-5	1	2	1	2	3	54	1234	68	18	96	DORITOS	card-r3-c1
-5	1	2	1	3	1	54	1256	44	18	96	Chips	card-r3-c1
-5	1	2	1	3	2	54	1278	70	18	95	Assorted	card-r3-c1
-5	1	2	1	3	3	54	1300	76	18	95	50g/65g	card-r3-c1
+5	1	1	1	1	1	925	480	16	24	96	3	card-r1-c3
+5	1	1	1	1	2	945	480	30	24	96	FOR	card-r1-c3
+5	1	1	1	2	1	930	505	72	42	96	2250	card-r1-c3
+5	1	1	1	3	1	918	566	72	18	95	MAGNUM	card-r1-c3
+5	1	1	1	4	1	918	588	78	18	95	Multipack	card-r1-c3
+5	1	1	1	4	2	1000	588	42	18	94	Mini	card-r1-c3
+5	1	1	1	5	1	918	610	70	18	95	Assorted	card-r1-c3
+5	1	1	1	5	2	992	610	52	18	96	3s-6s	card-r1-c3
+5	1	2	1	1	1	55	1105	16	24	96	2	card-r3-c1
+5	1	2	1	1	2	75	1105	30	24	96	FOR	card-r3-c1
+5	1	2	1	2	1	60	1130	58	42	96	300	card-r3-c1
+5	1	2	1	3	1	54	1190	46	18	96	LAYS	card-r3-c1
+5	1	2	1	4	1	54	1212	66	18	95	RUFFLES	card-r3-c1
+5	1	2	1	5	1	54	1234	68	18	96	DORITOS	card-r3-c1
+5	1	2	1	6	1	54	1256	44	18	96	Chips	card-r3-c1
+5	1	2	1	6	2	102	1256	70	18	95	Assorted	card-r3-c1
+5	1	2	1	7	1	54	1278	76	18	95	50g/65g	card-r3-c1

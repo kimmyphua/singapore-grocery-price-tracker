@@ -68,6 +68,8 @@ describe("promotion OCR", () => {
       { regionId: "card-1", x: 20, y: 300, width: 300, height: 260 },
       { regionId: "card-2", x: 340, y: 300, width: 300, height: 260 }
     ];
+    const onRegionFailure = vi.fn();
+    const cropError = new Error("crop OCR failed");
 
     const pages = await ocrAssetPages(
       {
@@ -82,13 +84,14 @@ describe("promotion OCR", () => {
         cropImage: async (_image, region) => Buffer.from(region.regionId),
         recognizeImage: async (bytes) => {
           if (bytes.toString() === "card-1") {
-            throw new Error("crop OCR failed");
+            throw cropError;
           }
           return {
             text: "LAYS",
             items: [{ str: "LAYS", x: 8, y: 9, width: 30, height: 10 }]
           };
-        }
+        },
+        onRegionFailure
       }
     );
 
@@ -106,6 +109,30 @@ describe("promotion OCR", () => {
         ]
       }
     ]);
+    expect(onRegionFailure).toHaveBeenCalledOnce();
+    expect(onRegionFailure).toHaveBeenCalledWith({
+      regionId: "card-1",
+      error: cropError
+    });
+  });
+
+  it("fails FairPrice OCR when no credible card regions are detected", async () => {
+    await expect(
+      ocrAssetPages(
+        {
+          assetBytes: Buffer.from("fairprice-page"),
+          assetKind: "image",
+          assetUrl: "https://example.com/unknown-publication.jpg",
+          parserKind: "fairprice-grid"
+        },
+        {
+          loadImage: async () => ({ width: 1404, height: 1824 }),
+          findFairPriceCardRegions: () => [],
+          cropImage: vi.fn(),
+          recognizeImage: vi.fn()
+        }
+      )
+    ).rejects.toThrow("FairPrice flyer card regions were not detected");
   });
 
   it("keeps partial rows aligned to established columns and rejects callouts", () => {
@@ -148,13 +175,13 @@ describe("promotion OCR", () => {
     expect(rowBounds.size).toBe(3);
   });
 
-  it("preserves credible detected rows when no regular row exists", () => {
+  it("bounds sparse card regions when no regular row exists", () => {
     const width = 600;
     const height = 800;
     const data = new Uint8ClampedArray(width * height * 4);
     for (const [x, y] of [
       [80, 260],
-      [330, 520]
+      [330, 260]
     ]) {
       fillBlueRectangle(data, width, x, y, 70, 48);
     }
@@ -163,6 +190,21 @@ describe("promotion OCR", () => {
 
     expect(regions).toHaveLength(2);
     expect(new Set(regions.map((region) => region.regionId)).size).toBe(2);
+    expect(regions[0].x).toBeGreaterThan(0);
+    expect(regions[1].x + regions[1].width).toBeLessThan(width);
+    expect(regions.every((region) => region.width <= 250)).toBe(true);
+    expect(regions[0].x + regions[0].width).toBeLessThanOrEqual(
+      regions[1].x
+    );
+  });
+
+  it("does not create a FairPrice region from a singleton badge", () => {
+    const width = 600;
+    const height = 800;
+    const data = new Uint8ClampedArray(width * height * 4);
+    fillBlueRectangle(data, width, 230, 300, 70, 48);
+
+    expect(findFairPriceCardRegions({ width, height, data })).toEqual([]);
   });
 
   it("does not establish a grid from regular rows without column consensus", () => {
