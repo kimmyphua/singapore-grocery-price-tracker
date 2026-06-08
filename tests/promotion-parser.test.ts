@@ -1,27 +1,14 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
-  createTesseractWorker,
   extractPromotionDealsFromPages,
+  isTrustworthyPromotionDeal,
   parsePromotionAsset
 } from "@/lib/promotions/parser";
+import type { PromotionTextItem } from "@/lib/promotions/types";
 
 describe("weekly promotion parser", () => {
-  it("starts Tesseract with the packaged Node worker path", async () => {
-    const worker = { recognize: vi.fn(), terminate: vi.fn() };
-    const createWorker = vi.fn(async () => worker);
-
-    await expect(createTesseractWorker(createWorker)).resolves.toBe(worker);
-    expect(createWorker).toHaveBeenCalledWith(
-      "eng",
-      1,
-      expect.objectContaining({
-        workerPath: expect.stringContaining(
-          "node_modules/tesseract.js/src/worker-script/node/index.js"
-        )
-      })
-    );
-  });
-
   it("extracts snack and ice cream deals with price and promo text", () => {
     const deals = extractPromotionDealsFromPages([
       {
@@ -52,7 +39,8 @@ describe("weekly promotion parser", () => {
       {
         assetBytes: Buffer.from("image-heavy-pdf"),
         assetKind: "pdf",
-        assetUrl: "https://example.com/flyer.pdf"
+        assetUrl: "https://example.com/flyer.pdf",
+        parserKind: "document"
       },
       {
         extractTextPages: async () => [{ pageNumber: 1, text: "" }],
@@ -70,115 +58,13 @@ describe("weekly promotion parser", () => {
     ]);
   });
 
-  it("uses verified FairPrice flyer card data when full-page OCR is too noisy", async () => {
-    const deals = await parsePromotionAsset({
-      assetBytes: Buffer.from("current-fairprice-weekly-savers"),
-      assetKind: "image",
-      assetUrl: "https://view.publitas.com/91990/1790843/pages/f550e9f6-eb67-48fb-b29c-691343bbe981-at1600.jpg"
-    });
-
-    expect(deals).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          category: "SNACKS",
-          rawTitle: "KIT KAT Block Chocolates Assorted 160g",
-          priceText: "$4.20"
-        }),
-        expect.objectContaining({
-          category: "SNACKS",
-          rawTitle: "KETTLE Potato Chips Assorted 141g",
-          priceText: "$10.00",
-          promoText: "2 FOR"
-        })
-      ])
-    );
-  });
-
-  it("uses verified Giant flyer card data when the PDF has no embedded text", async () => {
-    const deals = await parsePromotionAsset({
-      assetBytes: Buffer.from("current-giant-super-savings"),
-      assetKind: "pdf",
-      assetUrl: "https://giant.sg/media/uploads/filemanager/28may-gss.pdf"
-    });
-
-    expect(deals).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          category: "SNACKS",
-          rawTitle: "CHEETOS Crunchy Cheese/Cheddar Jalapeno/Puffs/Flaming Assorted 200g/215g",
-          priceText: "$4.70"
-        }),
-        expect.objectContaining({
-          category: "ICE_CREAM",
-          rawTitle: "BEN & JERRY'S Ice Cream Assorted 427ml-473ml",
-          priceText: "$27.50",
-          promoText: "ANY 3"
-        })
-      ])
-    );
-  });
-
-  it("uses verified Cold Storage flyer card data when serverless PDF parsing is unavailable", async () => {
-    const deals = await parsePromotionAsset(
-      {
-        assetBytes: Buffer.from("current-cold-storage-grocery-selections"),
-        assetKind: "pdf",
-        assetUrl: "http://csp.coldstorage.com.sg/media/weeklydeals/371/wk22_28_may_grocery_a3_fa-v1-20260527123710.pdf"
-      },
-      {
-        extractTextPages: async () => {
-          throw new Error("pdf runtime unavailable");
-        }
-      }
-    );
-
-    expect(deals).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          category: "ICE_CREAM",
-          rawTitle: "TILLAMOOK Ice Cream Assorted 1.42L",
-          priceText: "$14.95"
-        }),
-        expect.objectContaining({
-          category: "SNACKS",
-          rawTitle: "CHEETOS Corn Puff Snacks Assorted 200g/215g",
-          priceText: "$4.70"
-        })
-      ])
-    );
-  });
-
-  it("uses verified Sheng Siong flyer cards instead of loose OCR grouping", async () => {
-    const deals = await parsePromotionAsset({
-      assetBytes: Buffer.from("current-sheng-siong-four-days-special"),
-      assetKind: "pdf",
-      assetUrl: "https://shengsiongcontent.s3.ap-southeast-1.amazonaws.com/wp-content/uploads/2026/05/26135433/SSAD26-1162-4-DAYS-28-310526-ST_ET.pdf"
-    });
-
-    expect(deals).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          category: "SNACKS",
-          rawTitle: "DORITOS Tortilla Chips Assorted Flavours 190g",
-          priceText: "$7.95",
-          promoText: "For 2; SAVE 25%"
-        }),
-        expect.objectContaining({
-          category: "ICE_CREAM",
-          rawTitle: "HAAGEN-DAZS Ice Cream Assorted Flavours 420ml-473ml",
-          priceText: "$25.00",
-          promoText: "For 3; SAVE 43%"
-        })
-      ])
-    );
-  });
-
   it("skips unverified Sheng Siong dense flyers rather than queuing noisy OCR candidates", async () => {
     const deals = await parsePromotionAsset(
       {
         assetBytes: Buffer.from("unverified-sheng-siong-flyer"),
         assetKind: "pdf",
-        assetUrl: "https://shengsiongcontent.s3.ap-southeast-1.amazonaws.com/some-future-flyer.pdf"
+        assetUrl: "https://shengsiongcontent.s3.ap-southeast-1.amazonaws.com/some-future-flyer.pdf",
+        parserKind: "document"
       },
       {
         extractTextPages: async () => [{ pageNumber: 1, text: "" }],
@@ -441,4 +327,107 @@ describe("weekly promotion parser", () => {
       })
     ]);
   });
+
+  it("extracts current FairPrice deals from region-tagged positioned OCR", async () => {
+    const [mustBuyItems, weeklySaversItems] = await Promise.all([
+      loadPositionedFixture("fairprice-must-buy-page-1.tsv"),
+      loadPositionedFixture("fairprice-weekly-savers-page-1.tsv")
+    ]);
+
+    const deals = extractPromotionDealsFromPages([
+      { pageNumber: 1, text: "", items: mustBuyItems },
+      { pageNumber: 2, text: "", items: weeklySaversItems }
+    ]);
+
+    expect(deals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "ICE_CREAM",
+          rawTitle: expect.stringContaining("MAGNUM"),
+          priceText: "$22.50",
+          promoText: expect.stringContaining("3 FOR")
+        }),
+        expect.objectContaining({
+          category: "SNACKS",
+          rawTitle: expect.stringContaining("LAYS"),
+          priceText: "$3.00",
+          promoText: expect.stringContaining("2 FOR")
+        })
+      ])
+    );
+  });
+
+  it("rejects fragmented FairPrice OCR without a trustworthy card price", () => {
+    const deals = extractPromotionDealsFromPages([
+      {
+        pageNumber: 1,
+        text: "",
+        items: [
+          { str: "-ema", x: 10, y: 10, regionId: "card-1" },
+          { str: "Pocky", x: 20, y: 20, regionId: "card-1" },
+          {
+            str: "Chocolate/strawberry/",
+            x: 30,
+            y: 30,
+            regionId: "card-1"
+          },
+          { str: "Snack", x: 40, y: 40, regionId: "card-1" },
+          { str: "140g", x: 50, y: 50, regionId: "card-1" },
+          { str: "2FOR", x: 180, y: 10, regionId: "card-2" }
+        ]
+      }
+    ]);
+
+    expect(deals).toEqual([]);
+  });
+
+  it("accepts only readable, complete, high-confidence candidates", () => {
+    expect(
+      isTrustworthyPromotionDeal({
+        category: "SNACKS",
+        rawTitle: "LAYS Potato Chips Assorted 50g",
+        packText: "50g",
+        priceText: null,
+        parsedPrice: null,
+        promoText: "2 FOR",
+        pageNumber: 1,
+        confidence: 0.72
+      })
+    ).toBe(true);
+    expect(
+      isTrustworthyPromotionDeal({
+        category: "SNACKS",
+        rawTitle: "Pocky",
+        packText: null,
+        priceText: "$3.00",
+        parsedPrice: 3,
+        promoText: null,
+        pageNumber: 1,
+        confidence: 0.9
+      })
+    ).toBe(false);
+  });
 });
+
+async function loadPositionedFixture(filename: string): Promise<PromotionTextItem[]> {
+  const tsv = await fs.readFile(
+    path.join(process.cwd(), "tests", "fixtures", "promotions", filename),
+    "utf8"
+  );
+
+  return tsv
+    .trim()
+    .split(/\r?\n/)
+    .slice(1)
+    .map((line) => {
+      const columns = line.split("\t");
+      return {
+        str: columns[11],
+        x: Number(columns[6]),
+        y: Number(columns[7]),
+        width: Number(columns[8]),
+        height: Number(columns[9]),
+        regionId: columns[12]
+      };
+    });
+}

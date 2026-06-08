@@ -1,0 +1,8 @@
+level	page_num	block_num	par_num	line_num	word_num	left	top	width	height	conf	text	region_id
+5	1	1	1	1	1	360	575	48	22	96	2 FOR	card-r2-c2
+5	1	1	1	1	2	365	600	62	40	96	780	card-r2-c2
+5	1	1	1	2	1	360	665	54	18	95	GLICO	card-r2-c2
+5	1	1	1	2	2	360	687	50	18	96	Pocky	card-r2-c2
+5	1	1	1	3	1	360	709	86	18	94	Sharepack	card-r2-c2
+5	1	1	1	3	2	360	731	132	18	93	Chocolate/Strawberry	card-r2-c2
+5	1	1	1	4	1	360	753	74	18	95	140g-160g	card-r2-c2
