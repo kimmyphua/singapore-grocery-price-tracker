@@ -130,7 +130,7 @@ describe("promotion source discovery", () => {
             "giant-super-savings:2026-06-03T16:00:00.000Z",
           retailerSlug: "giant",
           assetUrl:
-            "https://giant.sg/media/uploads/filemanager/4jun-10jun-gss.pdf",
+            "https://giant.sg/media/uploads/filemanager/4jun-supersavings.pdf",
           assetKind: "pdf",
           parserKind: "document",
           pageNumber: 1,
@@ -215,7 +215,7 @@ describe("promotion source discovery", () => {
           seriesKey: "giant-super-savings",
           title: "Giant Super Savings",
           assetUrl:
-            "https://giant.sg/media/uploads/filemanager/4jun-10jun-gss.pdf",
+            "https://giant.sg/media/uploads/filemanager/4jun-supersavings.pdf",
           validFrom,
           validTo
         })
@@ -260,16 +260,18 @@ describe("promotion source discovery", () => {
     expect(result).toEqual({ sources: [], failures: [] });
   });
 
-  it("does not combine Giant dates and a PDF from unrelated elements", async () => {
+  it("skips Giant when the page PDF has no verified Super Savings range", async () => {
     const pages = new Map([
       [
         "https://giant.sg/super-savings",
         [
           "<html><body>",
-          '<section data-start="2026-06-04" data-end="2026-06-10">',
-          "<h2>Super Savings</h2>",
-          "</section>",
-          '<a href="/media/uploads/filemanager/unrelated.pdf">Other flyer</a>',
+          '<a href="/media/uploads/filemanager/4jun-supersavings.pdf">DOWNLOAD PDF</a>',
+          '<article data-slug="weekend-specials">',
+          '<div data-start="2026-06-04" data-end="2026-06-10">',
+          '<a href="/weekend-specials" title="Weekend Specials">Weekend Specials</a>',
+          "</div>",
+          "</article>",
           "</body></html>"
         ].join("")
       ]

@@ -150,11 +150,11 @@ async function discoverGiant(
 ): Promise<PromotionSource[]> {
   const html = await fetchText(fetcher, GIANT_URL);
   const heading = getHeading(html);
-  const associatedFlyer = findGiantDatedFlyer(html);
-  if (!associatedFlyer) {
+  const pdfUrl = findGiantSuperSavingsPdf(html);
+  const dates = findGiantSuperSavingsRange(html);
+  if (!pdfUrl || !dates) {
     return [];
   }
-  const { assetUrl: pdfUrl, dates } = associatedFlyer;
 
   return [
     {
@@ -351,40 +351,56 @@ function getHeading(html: string) {
   return $("h1").first().text().trim() || null;
 }
 
-function findGiantDatedFlyer(html: string) {
+function findGiantSuperSavingsPdf(html: string) {
+  const $ = cheerio.load(html);
+  const href = $("a")
+    .toArray()
+    .map((anchor) => $(anchor).attr("href"))
+    .find(
+      (candidate) =>
+        candidate &&
+        /\.pdf(?:$|\?)/i.test(candidate) &&
+        /super.?savings|\bgss\b/i.test(candidate)
+    );
+  return href ? new URL(decodeHtml(href), GIANT_URL).toString() : null;
+}
+
+function findGiantSuperSavingsRange(html: string) {
   const $ = cheerio.load(html);
   const candidates = $("[data-start][data-end]")
     .toArray()
     .flatMap((element) => {
-      const section = $(element);
-      const pdfHref = section
+      const datedCard = $(element);
+      const isSuperSavingsSlug =
+        datedCard.closest('[data-slug="super-savings"]').length > 0;
+      const isSuperSavingsLink = datedCard
         .find("a")
         .toArray()
-        .map((anchor) => $(anchor).attr("href"))
-        .find((href) => href && /\.pdf(?:$|\?)/i.test(href));
-      const context = `${section.text()} ${pdfHref ?? ""}`;
-      if (!pdfHref || !/super savings|\bgss\b/i.test(context)) {
+        .some((anchor) => {
+          const href = $(anchor).attr("href") ?? "";
+          const title = $(anchor).attr("title") ?? "";
+          return (
+            new URL(href, GIANT_URL).pathname.replace(/\/+$/, "") ===
+              "/super-savings" || /^super savings$/i.test(title.trim())
+          );
+        });
+      if (!isSuperSavingsSlug && !isSuperSavingsLink) {
         return [];
       }
 
-      const startText = formatIsoDateForRange(section.attr("data-start") ?? "");
-      const endText = formatIsoDateForRange(section.attr("data-end") ?? "");
+      const startText = formatIsoDateForRange(
+        datedCard.attr("data-start") ?? ""
+      );
+      const endText = formatIsoDateForRange(datedCard.attr("data-end") ?? "");
       const dates =
         startText && endText
           ? tryParsePromotionDateRange(`${startText} - ${endText}`)
           : null;
-      return dates
-        ? [
-            {
-              assetUrl: new URL(decodeHtml(pdfHref), GIANT_URL).toString(),
-              dates
-            }
-          ]
-        : [];
+      return dates ? [dates] : [];
     })
     .sort(
       (left, right) =>
-        right.dates.validFrom.getTime() - left.dates.validFrom.getTime()
+        right.validFrom.getTime() - left.validFrom.getTime()
     );
 
   return candidates[0] ?? null;
