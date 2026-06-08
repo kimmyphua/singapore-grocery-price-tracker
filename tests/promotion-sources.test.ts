@@ -195,6 +195,83 @@ describe("promotion source discovery", () => {
     ).toBe(false);
   });
 
+  it("uses Giant data attributes when the heading is undated", async () => {
+    const pages = new Map([
+      [
+        "https://giant.sg/super-savings",
+        await fixture("giant-super-savings.html")
+      ]
+    ]);
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "giant"
+    });
+
+    expect(result).toEqual({
+      failures: [],
+      sources: [
+        expect.objectContaining({
+          seriesKey: "giant-super-savings",
+          title: "Super Savings",
+          validFrom,
+          validTo
+        })
+      ]
+    });
+  });
+
+  it("skips Giant when neither the heading nor attributes verify dates", async () => {
+    const pages = new Map([
+      [
+        "https://giant.sg/super-savings",
+        [
+          "<html><body>",
+          "<h1>Super Savings</h1>",
+          '<a href="/media/uploads/filemanager/current.pdf">DOWNLOAD PDF</a>',
+          "</body></html>"
+        ].join("")
+      ]
+    ]);
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "giant"
+    });
+
+    expect(result).toEqual({ sources: [], failures: [] });
+  });
+
+  it("selects the Grocery Selections flyer image instead of the site logo", async () => {
+    const pages = await promotionPages();
+    const detailUrl =
+      "https://coldstorage.com.sg/weekly-ads/Grocery-Selections-1";
+    pages.set(
+      detailUrl,
+      (pages.get(detailUrl) ?? "").replace(
+        '<a href="https://csp.coldstorage.com.sg/media/weeklydeals/current.pdf">Shop Now</a>',
+        ""
+      )
+    );
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "cold-storage"
+    });
+
+    expect(result).toEqual({
+      failures: [],
+      sources: [
+        expect.objectContaining({
+          seriesKey: "cold-storage-grocery-selections",
+          assetKind: "image",
+          assetUrl:
+            "https://coldstorage.com.sg/media/weeklydeals/current-primary.jpg"
+        })
+      ]
+    });
+  });
+
   it("treats a fetched Sheng Siong listing with no dated flyer as empty", async () => {
     const pages = new Map([
       [

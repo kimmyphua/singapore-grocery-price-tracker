@@ -151,7 +151,9 @@ async function discoverGiant(
   const html = await fetchText(fetcher, GIANT_URL);
   const pdfUrl = findPdfUrl(html, GIANT_URL);
   const title = getHeading(html);
-  const dates = title ? tryParsePromotionDateRange(title) : null;
+  const dates =
+    (title ? tryParsePromotionDateRange(title) : null) ??
+    findDataAttributeDateRange(html);
   if (!pdfUrl || !title || !dates) {
     return [];
   }
@@ -310,13 +312,86 @@ function findPdfUrl(html: string, baseUrl: string) {
 
 function findPrimaryImageUrl(html: string, baseUrl: string) {
   const $ = cheerio.load(html);
-  const source = $("img").first().attr("src");
+  const images = $("img").toArray();
+  const image =
+    images.find((element) =>
+      /grocery selections/i.test($(element).attr("alt") ?? "")
+    ) ??
+    images.find((element) =>
+      $(element).closest(
+        '.weekly-ad-detail, [class*="flyer"], [class*="weekly-ad"], figure'
+      ).length > 0
+    );
+  const source = image ? getImageSource($(image).attr() ?? {}) : null;
   return source ? new URL(decodeHtml(source), baseUrl).toString() : null;
+}
+
+function getImageSource(attributes: Record<string, string>) {
+  const srcset = attributes.srcset;
+  if (srcset) {
+    const candidates = srcset
+      .split(",")
+      .map((candidate) => candidate.trim().split(/\s+/))
+      .filter(([url]) => Boolean(url))
+      .map(([url, descriptor]) => ({
+        url,
+        width: descriptor?.endsWith("w")
+          ? Number(descriptor.slice(0, -1))
+          : 0
+      }))
+      .sort((left, right) => right.width - left.width);
+    if (candidates[0]) {
+      return candidates[0].url;
+    }
+  }
+
+  return attributes.src ?? null;
 }
 
 function getHeading(html: string) {
   const $ = cheerio.load(html);
   return $("h1").first().text().trim() || null;
+}
+
+function findDataAttributeDateRange(html: string) {
+  const $ = cheerio.load(html);
+  const datedElement = $("[data-start][data-end]").first();
+  const start = datedElement.attr("data-start");
+  const end = datedElement.attr("data-end");
+  if (!start || !end) {
+    return null;
+  }
+
+  const startText = formatIsoDateForRange(start);
+  const endText = formatIsoDateForRange(end);
+  return startText && endText
+    ? tryParsePromotionDateRange(`${startText} - ${endText}`)
+    : null;
+}
+
+function formatIsoDateForRange(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day] = match;
+  const monthNumber = Number(month);
+  const monthName = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"
+  ][monthNumber - 1];
+  return monthName ? `${Number(day)} ${monthName} ${year}` : null;
 }
 
 function tryParsePromotionDateRange(text: string) {
