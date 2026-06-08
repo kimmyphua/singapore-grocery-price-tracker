@@ -13,3 +13,4 @@ data/weekly-ads
 eng.traineddata
 qa-screenshots
 .vercel
+.worktrees/
