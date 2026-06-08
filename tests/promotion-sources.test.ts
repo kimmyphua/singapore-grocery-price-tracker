@@ -214,6 +214,8 @@ describe("promotion source discovery", () => {
         expect.objectContaining({
           seriesKey: "giant-super-savings",
           title: "Giant Super Savings",
+          assetUrl:
+            "https://giant.sg/media/uploads/filemanager/4jun-10jun-gss.pdf",
           validFrom,
           validTo
         })
@@ -247,6 +249,29 @@ describe("promotion source discovery", () => {
       [
         "https://giant.sg/super-savings",
         '<html><body><section data-start="2026-06-04" data-end="2026-06-10"></section></body></html>'
+      ]
+    ]);
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "giant"
+    });
+
+    expect(result).toEqual({ sources: [], failures: [] });
+  });
+
+  it("does not combine Giant dates and a PDF from unrelated elements", async () => {
+    const pages = new Map([
+      [
+        "https://giant.sg/super-savings",
+        [
+          "<html><body>",
+          '<section data-start="2026-06-04" data-end="2026-06-10">',
+          "<h2>Super Savings</h2>",
+          "</section>",
+          '<a href="/media/uploads/filemanager/unrelated.pdf">Other flyer</a>',
+          "</body></html>"
+        ].join("")
       ]
     ]);
 

@@ -149,14 +149,12 @@ async function discoverGiant(
   fetcher: PromotionFetch
 ): Promise<PromotionSource[]> {
   const html = await fetchText(fetcher, GIANT_URL);
-  const pdfUrl = findPdfUrl(html, GIANT_URL);
   const heading = getHeading(html);
-  const dates =
-    (heading ? tryParsePromotionDateRange(heading) : null) ??
-    findDataAttributeDateRange(html);
-  if (!pdfUrl || !dates) {
+  const associatedFlyer = findGiantDatedFlyer(html);
+  if (!associatedFlyer) {
     return [];
   }
+  const { assetUrl: pdfUrl, dates } = associatedFlyer;
 
   return [
     {
@@ -353,20 +351,43 @@ function getHeading(html: string) {
   return $("h1").first().text().trim() || null;
 }
 
-function findDataAttributeDateRange(html: string) {
+function findGiantDatedFlyer(html: string) {
   const $ = cheerio.load(html);
-  const datedElement = $("[data-start][data-end]").first();
-  const start = datedElement.attr("data-start");
-  const end = datedElement.attr("data-end");
-  if (!start || !end) {
-    return null;
-  }
+  const candidates = $("[data-start][data-end]")
+    .toArray()
+    .flatMap((element) => {
+      const section = $(element);
+      const pdfHref = section
+        .find("a")
+        .toArray()
+        .map((anchor) => $(anchor).attr("href"))
+        .find((href) => href && /\.pdf(?:$|\?)/i.test(href));
+      const context = `${section.text()} ${pdfHref ?? ""}`;
+      if (!pdfHref || !/super savings|\bgss\b/i.test(context)) {
+        return [];
+      }
 
-  const startText = formatIsoDateForRange(start);
-  const endText = formatIsoDateForRange(end);
-  return startText && endText
-    ? tryParsePromotionDateRange(`${startText} - ${endText}`)
-    : null;
+      const startText = formatIsoDateForRange(section.attr("data-start") ?? "");
+      const endText = formatIsoDateForRange(section.attr("data-end") ?? "");
+      const dates =
+        startText && endText
+          ? tryParsePromotionDateRange(`${startText} - ${endText}`)
+          : null;
+      return dates
+        ? [
+            {
+              assetUrl: new URL(decodeHtml(pdfHref), GIANT_URL).toString(),
+              dates
+            }
+          ]
+        : [];
+    })
+    .sort(
+      (left, right) =>
+        right.dates.validFrom.getTime() - left.dates.validFrom.getTime()
+    );
+
+  return candidates[0] ?? null;
 }
 
 function formatIsoDateForRange(value: string) {
