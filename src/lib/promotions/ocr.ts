@@ -191,21 +191,27 @@ export function findFairPriceCardRegions(
   }
 
   const clusteredRows = clusterBadgeRows(badges, image.height);
-  const regularRows = clusteredRows.filter((row) => row.length >= 3);
-  const rows = regularRows.length > 0 ? regularRows : clusteredRows;
+  const columns = getEstablishedBadgeColumns(clusteredRows, image.width);
+  const rows: BadgeRow[] =
+    columns.length > 0
+      ? getRowsAlignedToColumns(clusteredRows, columns, image.width)
+      : clusteredRows.map((badges) => ({ badges }));
+
   return rows.flatMap((row, rowIndex) => {
-    const sorted = [...row].sort((left, right) => left.x - right.x);
+    const sorted = [...row.badges].sort(
+      (left, right) => left.x - right.x
+    );
     const rowCenter =
       sorted.reduce((sum, badge) => sum + badge.y + badge.height / 2, 0) /
       sorted.length;
     const previousCenter =
       rowIndex === 0
         ? headerBottom
-        : getRowCenter(rows[rowIndex - 1]);
+        : getRowCenter(rows[rowIndex - 1].badges);
     const nextCenter =
       rowIndex === rows.length - 1
         ? image.height
-        : getRowCenter(rows[rowIndex + 1]);
+        : getRowCenter(rows[rowIndex + 1].badges);
     const top = Math.max(
       headerBottom,
       Math.round((previousCenter + rowCenter) / 2)
@@ -216,28 +222,27 @@ export function findFairPriceCardRegions(
     );
 
     return sorted.map((badge, columnIndex) => {
-      const center = badge.x + badge.width / 2;
-      const previousX =
-        columnIndex === 0
-          ? 0
-          : sorted[columnIndex - 1].x +
-            sorted[columnIndex - 1].width / 2;
-      const nextX =
-        columnIndex === sorted.length - 1
-          ? image.width
-          : sorted[columnIndex + 1].x +
-            sorted[columnIndex + 1].width / 2;
-      const left = Math.max(0, Math.round((previousX + center) / 2));
-      const right = Math.min(
-        image.width,
-        Math.round((center + nextX) / 2)
-      );
+      const establishedColumnIndex = row.columnIndexes?.get(badge);
+      const bounds =
+        establishedColumnIndex === undefined
+          ? getSparseRowColumnBounds(
+              sorted,
+              columnIndex,
+              image.width
+            )
+          : getEstablishedColumnBounds(
+              columns,
+              establishedColumnIndex,
+              image.width
+            );
 
       return {
-        regionId: `row-${rowIndex + 1}-card-${columnIndex + 1}`,
-        x: left,
+        regionId: `row-${rowIndex + 1}-card-${
+          (establishedColumnIndex ?? columnIndex) + 1
+        }`,
+        x: bounds.left,
         y: top,
-        width: Math.max(1, right - left),
+        width: Math.max(1, bounds.right - bounds.left),
         height: Math.max(1, bottom - top)
       };
     });
@@ -250,6 +255,166 @@ type BadgeBounds = {
   width: number;
   height: number;
 };
+
+type BadgeColumn = {
+  center: number;
+  width: number;
+};
+
+type BadgeRow = {
+  badges: BadgeBounds[];
+  columnIndexes?: Map<BadgeBounds, number>;
+};
+
+function getEstablishedBadgeColumns(
+  rows: BadgeBounds[][],
+  imageWidth: number
+): BadgeColumn[] {
+  const regularRows = rows.filter((row) => row.length >= 3);
+  if (regularRows.length < 2) {
+    return [];
+  }
+
+  const clusters: Array<{
+    centers: number[];
+    widths: number[];
+    rowIndexes: Set<number>;
+  }> = [];
+  const tolerance = imageWidth * 0.04;
+
+  regularRows.forEach((row, rowIndex) => {
+    for (const badge of row) {
+      const center = getBadgeCenter(badge);
+      const cluster = clusters.find(
+        (candidate) =>
+          Math.abs(
+            candidate.centers.reduce((sum, value) => sum + value, 0) /
+              candidate.centers.length -
+              center
+          ) <= tolerance
+      );
+      if (cluster) {
+        cluster.centers.push(center);
+        cluster.widths.push(badge.width);
+        cluster.rowIndexes.add(rowIndex);
+      } else {
+        clusters.push({
+          centers: [center],
+          widths: [badge.width],
+          rowIndexes: new Set([rowIndex])
+        });
+      }
+    }
+  });
+
+  const columns = clusters
+    .filter((cluster) => cluster.rowIndexes.size >= 2)
+    .map((cluster) => ({
+      center:
+        cluster.centers.reduce((sum, value) => sum + value, 0) /
+        cluster.centers.length,
+      width:
+        cluster.widths.reduce((sum, value) => sum + value, 0) /
+        cluster.widths.length
+    }))
+    .sort((left, right) => left.center - right.center);
+
+  return columns.length >= 3 ? columns : [];
+}
+
+function getRowsAlignedToColumns(
+  rows: BadgeBounds[][],
+  columns: BadgeColumn[],
+  imageWidth: number
+): BadgeRow[] {
+  return rows.flatMap((badges) => {
+    const columnIndexes = new Map<BadgeBounds, number>();
+    const alignedBadges = badges.filter((badge) => {
+      const columnIndex = getNearestColumnIndex(badge, columns);
+      const column = columns[columnIndex];
+      const tolerance = Math.max(column.width * 0.55, imageWidth * 0.03);
+      if (Math.abs(getBadgeCenter(badge) - column.center) > tolerance) {
+        return false;
+      }
+      if ([...columnIndexes.values()].includes(columnIndex)) {
+        return false;
+      }
+      columnIndexes.set(badge, columnIndex);
+      return true;
+    });
+
+    return alignedBadges.length > 0
+      ? [{ badges: alignedBadges, columnIndexes }]
+      : [];
+  });
+}
+
+function getNearestColumnIndex(
+  badge: BadgeBounds,
+  columns: BadgeColumn[]
+) {
+  const center = getBadgeCenter(badge);
+  let nearestIndex = 0;
+  for (let index = 1; index < columns.length; index += 1) {
+    if (
+      Math.abs(columns[index].center - center) <
+      Math.abs(columns[nearestIndex].center - center)
+    ) {
+      nearestIndex = index;
+    }
+  }
+  return nearestIndex;
+}
+
+function getBadgeCenter(badge: BadgeBounds) {
+  return badge.x + badge.width / 2;
+}
+
+function getEstablishedColumnBounds(
+  columns: BadgeColumn[],
+  columnIndex: number,
+  imageWidth: number
+) {
+  return {
+    left:
+      columnIndex === 0
+        ? 0
+        : Math.round(
+            (columns[columnIndex - 1].center +
+              columns[columnIndex].center) /
+              2
+          ),
+    right:
+      columnIndex === columns.length - 1
+        ? imageWidth
+        : Math.round(
+            (columns[columnIndex].center +
+              columns[columnIndex + 1].center) /
+              2
+          )
+  };
+}
+
+function getSparseRowColumnBounds(
+  row: BadgeBounds[],
+  columnIndex: number,
+  imageWidth: number
+) {
+  const center = getBadgeCenter(row[columnIndex]);
+  const previousCenter =
+    columnIndex === 0 ? 0 : getBadgeCenter(row[columnIndex - 1]);
+  const nextCenter =
+    columnIndex === row.length - 1
+      ? imageWidth
+      : getBadgeCenter(row[columnIndex + 1]);
+  return {
+    left: Math.max(0, Math.round((previousCenter + center) / 2)),
+    right: Math.min(
+      imageWidth,
+      Math.round((center + nextCenter) / 2)
+    )
+  };
+}
 
 function findBlueBadgeBounds(
   data: Uint8ClampedArray,

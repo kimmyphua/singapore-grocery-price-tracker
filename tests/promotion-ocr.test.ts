@@ -108,7 +108,7 @@ describe("promotion OCR", () => {
     ]);
   });
 
-  it("ignores blue callouts and isolated product shapes between card rows", () => {
+  it("keeps partial rows aligned to established columns and rejects callouts", () => {
     const width = 600;
     const height = 800;
     const data = new Uint8ClampedArray(width * height * 4);
@@ -119,16 +119,70 @@ describe("promotion OCR", () => {
       [30, 480, 70, 48],
       [230, 480, 70, 48],
       [430, 480, 70, 48],
-      [310, 330, 90, 20],
-      [120, 360, 70, 48]
+      [230, 350, 70, 48],
+      [130, 350, 70, 48]
     ]) {
       fillBlueRectangle(data, width, x, y, badgeWidth, badgeHeight);
     }
 
     const regions = findFairPriceCardRegions({ width, height, data });
 
+    expect(regions).toHaveLength(7);
+    expect(new Set(regions.map((region) => region.regionId)).size).toBe(7);
+
+    const partial = regions.find(
+      (region) => region.y > 300 && region.y < 400
+    );
+    expect(partial).toEqual(
+      expect.objectContaining({
+        x: expect.any(Number),
+        width: expect.any(Number)
+      })
+    );
+    expect(partial!.x).toBeGreaterThan(100);
+    expect(partial!.x + partial!.width).toBeLessThan(450);
+
+    const rowBounds = new Set(
+      regions.map((region) => `${region.y}:${region.height}`)
+    );
+    expect(rowBounds.size).toBe(3);
+  });
+
+  it("preserves credible detected rows when no regular row exists", () => {
+    const width = 600;
+    const height = 800;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (const [x, y] of [
+      [80, 260],
+      [330, 520]
+    ]) {
+      fillBlueRectangle(data, width, x, y, 70, 48);
+    }
+
+    const regions = findFairPriceCardRegions({ width, height, data });
+
+    expect(regions).toHaveLength(2);
+    expect(new Set(regions.map((region) => region.regionId)).size).toBe(2);
+  });
+
+  it("does not establish a grid from regular rows without column consensus", () => {
+    const width = 600;
+    const height = 800;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (const [x, y] of [
+      [30, 240],
+      [230, 240],
+      [430, 240],
+      [30, 500],
+      [310, 500],
+      [510, 500]
+    ]) {
+      fillBlueRectangle(data, width, x, y, 70, 48);
+    }
+
+    const regions = findFairPriceCardRegions({ width, height, data });
+
     expect(regions).toHaveLength(6);
-    expect(new Set(regions.map((region) => region.regionId)).size).toBe(6);
   });
 });
 
