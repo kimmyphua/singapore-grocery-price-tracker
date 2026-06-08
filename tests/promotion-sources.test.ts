@@ -195,7 +195,7 @@ describe("promotion source discovery", () => {
     ).toBe(false);
   });
 
-  it("uses Giant data attributes when the heading is undated", async () => {
+  it("uses Giant data attributes and a stable title when no heading exists", async () => {
     const pages = new Map([
       [
         "https://giant.sg/super-savings",
@@ -213,7 +213,7 @@ describe("promotion source discovery", () => {
       sources: [
         expect.objectContaining({
           seriesKey: "giant-super-savings",
-          title: "Super Savings",
+          title: "Giant Super Savings",
           validFrom,
           validTo
         })
@@ -231,6 +231,22 @@ describe("promotion source discovery", () => {
           '<a href="/media/uploads/filemanager/current.pdf">DOWNLOAD PDF</a>',
           "</body></html>"
         ].join("")
+      ]
+    ]);
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "giant"
+    });
+
+    expect(result).toEqual({ sources: [], failures: [] });
+  });
+
+  it("skips Giant when verified dates exist without a flyer asset", async () => {
+    const pages = new Map([
+      [
+        "https://giant.sg/super-savings",
+        '<html><body><section data-start="2026-06-04" data-end="2026-06-10"></section></body></html>'
       ]
     ]);
 

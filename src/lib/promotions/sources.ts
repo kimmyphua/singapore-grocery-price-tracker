@@ -150,11 +150,11 @@ async function discoverGiant(
 ): Promise<PromotionSource[]> {
   const html = await fetchText(fetcher, GIANT_URL);
   const pdfUrl = findPdfUrl(html, GIANT_URL);
-  const title = getHeading(html);
+  const heading = getHeading(html);
   const dates =
-    (title ? tryParsePromotionDateRange(title) : null) ??
+    (heading ? tryParsePromotionDateRange(heading) : null) ??
     findDataAttributeDateRange(html);
-  if (!pdfUrl || !title || !dates) {
+  if (!pdfUrl || !dates) {
     return [];
   }
 
@@ -163,7 +163,7 @@ async function discoverGiant(
       seriesKey: "giant-super-savings",
       publicationKey: `giant-super-savings:${dates.validFrom.toISOString()}`,
       retailerSlug: "giant",
-      title,
+      title: heading ?? "Giant Super Savings",
       sourceUrl: GIANT_URL,
       assetUrl: pdfUrl,
       assetKind: "pdf",
