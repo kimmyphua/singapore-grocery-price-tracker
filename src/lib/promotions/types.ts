@@ -6,14 +6,37 @@ export type PromotionRetailerSlug =
 
 export type PromotionAssetKind = "pdf" | "image";
 
+export type PromotionSeriesKey =
+  | "fairprice-weekly-savers"
+  | "fairprice-must-buy"
+  | "cold-storage-grocery-selections"
+  | "giant-super-savings"
+  | "sheng-siong-newspaper-advertisement";
+
+export type PromotionParserKind = "fairprice-grid" | "document";
+
 export type PromotionSource = {
+  seriesKey: PromotionSeriesKey;
+  publicationKey: string;
   retailerSlug: PromotionRetailerSlug;
   title: string;
   sourceUrl: string;
   assetUrl: string;
   assetKind: PromotionAssetKind;
-  validFrom?: Date;
-  validTo?: Date;
+  parserKind: PromotionParserKind;
+  pageNumber: number;
+  validFrom: Date;
+  validTo: Date;
+};
+
+export type PromotionDiscoveryFailure = {
+  seriesKey: PromotionSeriesKey;
+  message: string;
+};
+
+export type PromotionDiscoveryResult = {
+  sources: PromotionSource[];
+  failures: PromotionDiscoveryFailure[];
 };
 
 export type PromotionCategory = "SNACKS" | "ICE_CREAM";
@@ -45,4 +68,5 @@ export type PromotionTextItem = {
   y: number;
   width?: number;
   height?: number;
+  regionId?: string;
 };
