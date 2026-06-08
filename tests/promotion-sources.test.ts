@@ -39,6 +39,10 @@ async function promotionPages() {
       await fixture("sheng-siong-post.html")
     ],
     [
+      "https://corporate.shengsiong.com.sg/weekend-special-28-may-2026-31-may-2026/",
+      await fixture("sheng-siong-post-weekend.html")
+    ],
+    [
       "https://coldstorage.com.sg/weekly-ads",
       await fixture("cold-storage-listing.html")
     ],
@@ -70,7 +74,8 @@ describe("promotion source discovery", () => {
     const requests: string[] = [];
 
     const result = await discoverPromotionSources({
-      fetcher: createFetcher(pages, requests)
+      fetcher: createFetcher(pages, requests),
+      now: new Date("2026-06-08T04:00:00.000Z")
     });
 
     expect(result.failures).toEqual([]);
@@ -140,7 +145,7 @@ describe("promotion source discovery", () => {
         expect.objectContaining({
           seriesKey: "sheng-siong-newspaper-advertisement",
           publicationKey:
-            "sheng-siong-newspaper-advertisement:2026-05-27T16:00:00.000Z",
+            "sheng-siong-newspaper-advertisement:2026-05-27T16:00:00.000Z:4-days-special-28-may-2026-31-may-2026",
           retailerSlug: "sheng-siong",
           parserKind: "document",
           pageNumber: 1,
@@ -205,7 +210,8 @@ describe("promotion source discovery", () => {
 
     const result = await discoverPromotionSources({
       fetcher: createFetcher(pages),
-      retailerSlug: "giant"
+      retailerSlug: "giant",
+      now: new Date("2026-06-08T04:00:00.000Z")
     });
 
     expect(result).toEqual({
@@ -255,6 +261,37 @@ describe("promotion source discovery", () => {
     const result = await discoverPromotionSources({
       fetcher: createFetcher(pages),
       retailerSlug: "giant"
+    });
+
+    expect(result).toEqual({ sources: [], failures: [] });
+  });
+
+  it("skips Giant when Super Savings ranges are only stale or upcoming", async () => {
+    const pages = new Map([
+      [
+        "https://giant.sg/super-savings",
+        [
+          "<html><body>",
+          '<a href="/media/uploads/filemanager/4jun-supersavings.pdf">DOWNLOAD PDF</a>',
+          '<article data-slug="super-savings">',
+          '<div data-start="2026-05-28" data-end="2026-06-03">',
+          '<a href="/super-savings" title="Super Savings">Super Savings</a>',
+          "</div>",
+          "</article>",
+          '<article data-slug="super-savings">',
+          '<div data-start="2026-06-11" data-end="2026-06-17">',
+          '<a href="/super-savings" title="Super Savings">Super Savings</a>',
+          "</div>",
+          "</article>",
+          "</body></html>"
+        ].join("")
+      ]
+    ]);
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "giant",
+      now: new Date("2026-06-08T04:00:00.000Z")
     });
 
     expect(result).toEqual({ sources: [], failures: [] });
@@ -329,5 +366,49 @@ describe("promotion source discovery", () => {
     });
 
     expect(result).toEqual({ sources: [], failures: [] });
+  });
+
+  it("ignores Sheng Siong navigation noise before dated article links", async () => {
+    const pages = await promotionPages();
+    const requests: string[] = [];
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages, requests),
+      retailerSlug: "sheng-siong"
+    });
+
+    expect(result.failures).toEqual([]);
+    expect(result.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceUrl:
+            "https://corporate.shengsiong.com.sg/4-days-special-28-may-2026-31-may-2026/"
+        }),
+        expect.objectContaining({
+          sourceUrl:
+            "https://corporate.shengsiong.com.sg/weekend-special-28-may-2026-31-may-2026/"
+        })
+      ])
+    );
+    expect(result.sources).toHaveLength(2);
+    expect(requests).toEqual([
+      "https://corporate.shengsiong.com.sg/category/promotions/newspaper-advertisement/",
+      "https://corporate.shengsiong.com.sg/4-days-special-28-may-2026-31-may-2026/",
+      "https://corporate.shengsiong.com.sg/weekend-special-28-may-2026-31-may-2026/"
+    ]);
+  });
+
+  it("uses the Sheng Siong post slug to distinguish same-date publications", async () => {
+    const pages = await promotionPages();
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "sheng-siong"
+    });
+
+    expect(result.sources.map((source) => source.publicationKey)).toEqual([
+      "sheng-siong-newspaper-advertisement:2026-05-27T16:00:00.000Z:4-days-special-28-may-2026-31-may-2026",
+      "sheng-siong-newspaper-advertisement:2026-05-27T16:00:00.000Z:weekend-special-28-may-2026-31-may-2026"
+    ]);
   });
 });

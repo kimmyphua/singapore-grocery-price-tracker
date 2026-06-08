@@ -11,6 +11,7 @@ import type {
 type DiscoverOptions = {
   fetcher?: PromotionFetch;
   retailerSlug?: PromotionRetailerSlug;
+  now?: Date;
 };
 
 type PromotionFetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -18,7 +19,10 @@ type PromotionFetch = (url: string, init?: RequestInit) => Promise<Response>;
 type DiscoveryTask = {
   seriesKey: PromotionSeriesKey;
   retailerSlug: PromotionRetailerSlug;
-  discover: (fetcher: PromotionFetch) => Promise<PromotionSource[]>;
+  discover: (
+    fetcher: PromotionFetch,
+    now: Date
+  ) => Promise<PromotionSource[]>;
 };
 
 type PublitasMetadata = {
@@ -81,6 +85,7 @@ export async function discoverPromotionSources(
   options: DiscoverOptions = {}
 ): Promise<PromotionDiscoveryResult> {
   const fetcher = options.fetcher ?? fetch;
+  const now = options.now ?? new Date();
   const tasks = options.retailerSlug
     ? DISCOVERY_TASKS.filter(
         (task) => task.retailerSlug === options.retailerSlug
@@ -90,7 +95,7 @@ export async function discoverPromotionSources(
     tasks.map(async ({ seriesKey, discover }) => {
       try {
         return {
-          sources: await discover(fetcher),
+          sources: await discover(fetcher, now),
           failures: [] as PromotionDiscoveryFailure[]
         };
       } catch (error) {
@@ -146,12 +151,13 @@ async function discoverFairPriceSeries(
 }
 
 async function discoverGiant(
-  fetcher: PromotionFetch
+  fetcher: PromotionFetch,
+  now: Date
 ): Promise<PromotionSource[]> {
   const html = await fetchText(fetcher, GIANT_URL);
   const heading = getHeading(html);
   const pdfUrl = findGiantSuperSavingsPdf(html);
-  const dates = findGiantSuperSavingsRange(html);
+  const dates = findGiantActiveSuperSavingsRange(html, now);
   if (!pdfUrl || !dates) {
     return [];
   }
@@ -178,13 +184,10 @@ async function discoverShengSiong(
   const listingHtml = await fetchText(fetcher, SHENG_SIONG_URL);
   const $ = cheerio.load(listingHtml);
   const postUrls = unique(
-    $("a")
-      .map((_, element) => $(element).attr("href"))
-      .get()
-      .filter((href): href is string => Boolean(href))
+    [...$("article a").toArray(), ...$("a").toArray()]
+      .map((element) => $(element).attr("href"))
+      .filter(isShengSiongPostHref)
       .map((href) => new URL(href, SHENG_SIONG_URL).toString())
-      .filter((href) => href.includes("shengsiong.com.sg/"))
-      .filter((href) => /special|promotion|advertisement/i.test(href))
   ).slice(0, 3);
 
   const sources: PromotionSource[] = [];
@@ -201,7 +204,7 @@ async function discoverShengSiong(
 
     sources.push({
       seriesKey: "sheng-siong-newspaper-advertisement",
-      publicationKey: `sheng-siong-newspaper-advertisement:${dates.validFrom.toISOString()}`,
+      publicationKey: `sheng-siong-newspaper-advertisement:${dates.validFrom.toISOString()}:${normalizedUrlSlug(postUrl)}`,
       retailerSlug: "sheng-siong",
       title,
       sourceUrl: postUrl,
@@ -214,6 +217,36 @@ async function discoverShengSiong(
   }
 
   return sources;
+}
+
+function isShengSiongPostHref(href: string | undefined): href is string {
+  if (!href || href.startsWith("#")) {
+    return false;
+  }
+
+  const url = new URL(href, SHENG_SIONG_URL);
+  const path = url.pathname.toLowerCase();
+  if (
+    url.hostname !== "corporate.shengsiong.com.sg" ||
+    /^\/(?:category|tag|author|page|promotions?)(?:\/|$)/.test(path)
+  ) {
+    return false;
+  }
+
+  return (
+    /special|promotion|advertisement/.test(path) &&
+    /\d{1,2}[-/](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[-/]\d{4}/.test(
+      path
+    )
+  );
+}
+
+function normalizedUrlSlug(value: string) {
+  const segment = new URL(value).pathname.split("/").filter(Boolean).at(-1);
+  return decodeURIComponent(segment ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 async function discoverColdStorage(
@@ -365,7 +398,7 @@ function findGiantSuperSavingsPdf(html: string) {
   return href ? new URL(decodeHtml(href), GIANT_URL).toString() : null;
 }
 
-function findGiantSuperSavingsRange(html: string) {
+function findGiantActiveSuperSavingsRange(html: string, now: Date) {
   const $ = cheerio.load(html);
   const candidates = $("[data-start][data-end]")
     .toArray()
@@ -398,6 +431,11 @@ function findGiantSuperSavingsRange(html: string) {
           : null;
       return dates ? [dates] : [];
     })
+    .filter(
+      ({ validFrom, validTo }) =>
+        validFrom.getTime() <= now.getTime() &&
+        now.getTime() <= validTo.getTime()
+    )
     .sort(
       (left, right) =>
         right.validFrom.getTime() - left.validFrom.getTime()
