@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://grocery:grocery@localhost:5432/grocery_price_tracker?schema=public
+      DIRECT_URL: postgresql://grocery:grocery@localhost:5432/grocery_price_tracker?schema=public
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
