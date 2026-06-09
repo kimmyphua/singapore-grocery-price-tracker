@@ -5,6 +5,15 @@ import { FullPageLoadingOverlay } from "@/app/full-page-loading-overlay";
 
 type RefreshState = "idle" | "loading" | "done" | "error";
 
+type RefreshResult = {
+  publicationsDiscovered: number;
+  publicationsSkipped: number;
+  staleDealsRemoved: number;
+  flyersFetched: number;
+  candidatesCreated: number;
+  parseFailures: number;
+};
+
 export function RefreshWeeklyDealsButton() {
   const [state, setState] = useState<RefreshState>("idle");
   const [summary, setSummary] = useState<string | null>(null);
@@ -17,14 +26,9 @@ export function RefreshWeeklyDealsButton() {
       if (!response.ok) {
         throw new Error("Refresh failed");
       }
-      const result = (await response.json()) as {
-        flyersFetched: number;
-        duplicatesSkipped: number;
-        candidatesCreated: number;
-        parseFailures: number;
-      };
+      const result = (await response.json()) as RefreshResult;
       setSummary(
-        `${result.flyersFetched} flyers imported, ${result.candidatesCreated} review candidates, ${result.duplicatesSkipped} duplicates skipped.`
+        `${result.staleDealsRemoved} stale deals removed, ${result.flyersFetched} flyer pages imported, ${result.candidatesCreated} review candidates, ${result.publicationsSkipped} unchanged publications skipped.`
       );
       setState("done");
       if (result.candidatesCreated > 0) {

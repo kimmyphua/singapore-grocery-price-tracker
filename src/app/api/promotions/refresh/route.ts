@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { refreshWeeklyPromotions } from "@/lib/promotions/refresh-promotions";
+import {
+  refreshWeeklyPromotions,
+  type PromotionRefreshResult
+} from "@/lib/promotions/refresh-promotions";
 import type { PromotionRetailerSlug } from "@/lib/promotions/types";
 
 export const runtime = "nodejs";
@@ -14,7 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unsupported retailerSlug" }, { status: 400 });
   }
 
-  const result = await refreshWeeklyPromotions({
+  const result: PromotionRefreshResult = await refreshWeeklyPromotions({
     retailerSlug: retailerSlug as PromotionRetailerSlug | undefined
   });
   return NextResponse.json(result);
