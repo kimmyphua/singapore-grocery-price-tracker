@@ -6,7 +6,9 @@ import { parsePromotionAsset } from "./parser";
 import { discoverPromotionSources } from "./sources";
 import type {
   ExtractedPromotionDeal,
+  PromotionDiscoveryResult,
   PromotionRetailerSlug,
+  PromotionSeriesKey,
   PromotionSource
 } from "./types";
 
@@ -19,11 +21,21 @@ type PromotionAsset = {
   contentType: string | null;
 };
 
+type StoredFlyer = {
+  id: string;
+  seriesKey: PromotionSeriesKey;
+  validFrom: Date | null;
+  validTo: Date | null;
+};
+
 type PromotionRefreshClient = {
   retailer: {
     findUnique(args: { where: { slug: string }; select?: { id: true } }): Promise<{ id: string } | null>;
   };
   promotionFlyer: {
+    findMany(args: {
+      select?: Record<string, unknown>;
+    }): Promise<StoredFlyer[]>;
     findUnique(args: {
       where: { assetHash: string };
       select?: Record<string, unknown>;
@@ -41,6 +53,9 @@ type PromotionRefreshClient = {
     }): Promise<{ id: string }>;
   };
   promotionDeal: {
+    deleteMany(args: {
+      where: { flyerId: { in: string[] } };
+    }): Promise<{ count: number }>;
     findMany?(args: {
       where: { flyerId: string };
       select: {
@@ -63,12 +78,16 @@ type PromotionRefreshClient = {
 
 type PromotionRefreshDeps = {
   client?: PromotionRefreshClient;
-  discoverSources?: (options: PromotionRefreshOptions) => Promise<PromotionSource[]>;
+  now?: Date;
+  discoverSources?: (
+    options: PromotionRefreshOptions & { now: Date }
+  ) => Promise<PromotionDiscoveryResult>;
   fetchAsset?: (source: PromotionSource) => Promise<PromotionAsset>;
   parseAsset?: (input: {
     assetBytes: Buffer;
     assetKind: PromotionSource["assetKind"];
     assetUrl: string;
+    parserKind: PromotionSource["parserKind"];
   }) => Promise<ExtractedPromotionDeal[]>;
   writeAsset?: (
     source: PromotionSource,
@@ -79,10 +98,13 @@ type PromotionRefreshDeps = {
 };
 
 export type PromotionRefreshResult = {
+  publicationsDiscovered: number;
+  publicationsSkipped: number;
+  staleDealsRemoved: number;
   flyersFetched: number;
-  duplicatesSkipped: number;
   candidatesCreated: number;
   parseFailures: number;
+  failures: Array<{ seriesKey: PromotionSeriesKey; message: string }>;
 };
 
 export async function refreshWeeklyPromotions(
@@ -94,120 +116,268 @@ export async function refreshWeeklyPromotions(
   const fetchAsset = deps.fetchAsset ?? fetchPromotionAsset;
   const parseAsset = deps.parseAsset ?? parsePromotionAsset;
   const writeAsset = deps.writeAsset ?? writePromotionAsset;
+  const now = deps.now ?? new Date();
   const result: PromotionRefreshResult = {
+    publicationsDiscovered: 0,
+    publicationsSkipped: 0,
+    staleDealsRemoved: 0,
     flyersFetched: 0,
-    duplicatesSkipped: 0,
     candidatesCreated: 0,
-    parseFailures: 0
+    parseFailures: 0,
+    failures: []
   };
 
-  const sources = await discoverSourcesForRefresh(options);
-  for (const source of sources) {
+  const discovery = await discoverSourcesForRefresh({ ...options, now });
+  result.failures.push(...discovery.failures);
+
+  const storedFlyers = await client.promotionFlyer.findMany({
+    select: {
+      id: true,
+      seriesKey: true,
+      validFrom: true,
+      validTo: true
+    }
+  });
+  const storedBySeries = groupStoredFlyers(storedFlyers);
+  const latestStoredBySeries = new Map(
+    [...storedBySeries.entries()].map(([seriesKey, flyers]) => [
+      seriesKey,
+      latestStoredFlyer(flyers)
+    ])
+  );
+  const publications = groupPublications(discovery.sources);
+  result.publicationsDiscovered = publications.length;
+  const clearedSeries = new Set<PromotionSeriesKey>();
+
+  for (const [seriesKey, flyers] of storedBySeries) {
+    const latest = latestStoredFlyer(flyers);
+    if (latest.validTo && latest.validTo.getTime() < now.getTime()) {
+      await clearSeriesDeals(client, seriesKey, flyers, clearedSeries, result);
+    }
+  }
+
+  for (const publication of publications) {
+    const first = publication[0];
+    if (!first) {
+      continue;
+    }
+    const latest = latestStoredBySeries.get(first.seriesKey);
+    if (
+      latest?.validFrom &&
+      latest.validFrom.getTime() === first.validFrom.getTime()
+    ) {
+      result.publicationsSkipped += 1;
+      continue;
+    }
+
+    if (
+      !latest?.validFrom ||
+      first.validFrom.getTime() > latest.validFrom.getTime()
+    ) {
+      await clearSeriesDeals(
+        client,
+        first.seriesKey,
+        storedBySeries.get(first.seriesKey) ?? [],
+        clearedSeries,
+        result
+      );
+    }
+
+    for (const source of publication) {
+      await importPromotionPage(
+        source,
+        client,
+        fetchAsset,
+        parseAsset,
+        writeAsset,
+        result
+      );
+    }
+  }
+
+  return result;
+}
+
+async function importPromotionPage(
+  source: PromotionSource,
+  client: PromotionRefreshClient,
+  fetchAsset: NonNullable<PromotionRefreshDeps["fetchAsset"]>,
+  parseAsset: NonNullable<PromotionRefreshDeps["parseAsset"]>,
+  writeAsset: NonNullable<PromotionRefreshDeps["writeAsset"]>,
+  result: PromotionRefreshResult
+) {
+  try {
     const retailer = await client.retailer.findUnique({
       where: { slug: source.retailerSlug },
       select: { id: true }
     });
     if (!retailer) {
-      result.parseFailures += 1;
-      continue;
+      recordFailure(
+        result,
+        source.seriesKey,
+        `Retailer not found: ${source.retailerSlug}`
+      );
+      return;
     }
 
-    try {
-      const asset = await fetchAsset(source);
-      const assetHash = hashBytes(asset.bytes);
-      const existingFlyer = await client.promotionFlyer.findUnique({
-        where: { assetHash },
-        select: {
-          id: true,
-          status: true,
-          assetPath: true,
-          _count: { select: { deals: true } }
-        }
-      });
-
-      if (existingFlyer) {
-        const deals = await parseAsset({
-          assetBytes: asset.bytes,
-          assetKind: source.assetKind,
-          assetUrl: source.assetUrl
-        });
-        if (client.promotionFlyer.update) {
-          await client.promotionFlyer.update({
-            where: { id: existingFlyer.id },
-            data: { status: "IMPORTED", errorMessage: null },
-            select: { id: true }
-          });
-        }
-        const created = await createPendingDeals(
-          client,
-          existingFlyer.id,
-          retailer.id,
-          deals
-        );
-        if (created === 0) {
-          result.duplicatesSkipped += 1;
-          continue;
-        }
-        result.candidatesCreated += created;
-        continue;
+    const asset = await fetchAsset(source);
+    const assetHash = hashBytes(asset.bytes);
+    const existingFlyer = await client.promotionFlyer.findUnique({
+      where: { assetHash },
+      select: {
+        id: true,
+        status: true,
+        assetPath: true,
+        _count: { select: { deals: true } }
       }
+    });
 
-      const assetPath = await getAssetPathOrRemoteUrl(
-        source,
-        asset,
-        assetHash,
-        writeAsset
-      );
-      let deals: ExtractedPromotionDeal[];
-      try {
-        deals = await parseAsset({
-          assetBytes: asset.bytes,
-          assetKind: source.assetKind,
-          assetUrl: source.assetUrl
-        });
-      } catch (error) {
-        await client.promotionFlyer.create({
-          data: {
-            retailerId: retailer.id,
-            title: source.title,
-            sourceUrl: source.sourceUrl,
-            assetUrl: source.assetUrl,
-            assetPath,
-            assetHash,
-            validFrom: source.validFrom ?? null,
-            validTo: source.validTo ?? null,
-            status: "PARSE_FAILED",
-            errorMessage: toErrorMessage(error)
-          },
+    if (existingFlyer) {
+      const deals = (await parseAsset({
+        assetBytes: asset.bytes,
+        assetKind: source.assetKind,
+        assetUrl: source.assetUrl,
+        parserKind: source.parserKind
+      })).map((parsedDeal) => ({
+        ...parsedDeal,
+        pageNumber: source.pageNumber
+      }));
+      if (client.promotionFlyer.update) {
+        await client.promotionFlyer.update({
+          where: { id: existingFlyer.id },
+          data: { status: "IMPORTED", errorMessage: null },
           select: { id: true }
         });
-        result.flyersFetched += 1;
-        result.parseFailures += 1;
-        continue;
       }
+      result.candidatesCreated += await createPendingDeals(
+        client,
+        existingFlyer.id,
+        retailer.id,
+        deals
+      );
+      return;
+    }
+
+    const assetPath = await getAssetPathOrRemoteUrl(
+      source,
+      asset,
+      assetHash,
+      writeAsset
+    );
+    let deals: ExtractedPromotionDeal[];
+    try {
+      deals = (await parseAsset({
+        assetBytes: asset.bytes,
+        assetKind: source.assetKind,
+        assetUrl: source.assetUrl,
+        parserKind: source.parserKind
+      })).map((parsedDeal) => ({
+        ...parsedDeal,
+        pageNumber: source.pageNumber
+      }));
+    } catch (error) {
       const flyer = await client.promotionFlyer.create({
         data: {
           retailerId: retailer.id,
+          seriesKey: source.seriesKey,
           title: source.title,
           sourceUrl: source.sourceUrl,
           assetUrl: source.assetUrl,
           assetPath,
           assetHash,
-          validFrom: source.validFrom ?? null,
-          validTo: source.validTo ?? null,
-          status: "IMPORTED"
+          validFrom: source.validFrom,
+          validTo: source.validTo,
+          status: "PARSE_FAILED",
+          errorMessage: toErrorMessage(error)
         },
         select: { id: true }
       });
       result.flyersFetched += 1;
-
-      result.candidatesCreated += await createPendingDeals(client, flyer.id, retailer.id, deals);
-    } catch (error) {
-      result.parseFailures += 1;
+      recordFailure(result, source.seriesKey, toErrorMessage(error));
+      return flyer;
     }
-  }
 
-  return result;
+    const flyer = await client.promotionFlyer.create({
+      data: {
+        retailerId: retailer.id,
+        seriesKey: source.seriesKey,
+        title: source.title,
+        sourceUrl: source.sourceUrl,
+        assetUrl: source.assetUrl,
+        assetPath,
+        assetHash,
+        validFrom: source.validFrom,
+        validTo: source.validTo,
+        status: "IMPORTED"
+      },
+      select: { id: true }
+    });
+    result.flyersFetched += 1;
+    result.candidatesCreated += await createPendingDeals(
+      client,
+      flyer.id,
+      retailer.id,
+      deals
+    );
+  } catch (error) {
+    recordFailure(result, source.seriesKey, toErrorMessage(error));
+  }
+}
+
+function groupPublications(sources: PromotionSource[]) {
+  const groups = new Map<string, PromotionSource[]>();
+  for (const source of sources) {
+    const pages = groups.get(source.publicationKey) ?? [];
+    pages.push(source);
+    groups.set(source.publicationKey, pages);
+  }
+  return [...groups.values()].map((pages) =>
+    pages.sort((a, b) => a.pageNumber - b.pageNumber)
+  );
+}
+
+function groupStoredFlyers(storedFlyers: StoredFlyer[]) {
+  const groups = new Map<PromotionSeriesKey, StoredFlyer[]>();
+  for (const flyer of storedFlyers) {
+    const flyers = groups.get(flyer.seriesKey) ?? [];
+    flyers.push(flyer);
+    groups.set(flyer.seriesKey, flyers);
+  }
+  return groups;
+}
+
+function latestStoredFlyer(flyers: StoredFlyer[]) {
+  return flyers.reduce((latest, flyer) => {
+    const latestTime = latest.validFrom?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const flyerTime = flyer.validFrom?.getTime() ?? Number.NEGATIVE_INFINITY;
+    return flyerTime > latestTime ? flyer : latest;
+  });
+}
+
+async function clearSeriesDeals(
+  client: PromotionRefreshClient,
+  seriesKey: PromotionSeriesKey,
+  flyers: StoredFlyer[],
+  clearedSeries: Set<PromotionSeriesKey>,
+  result: PromotionRefreshResult
+) {
+  if (clearedSeries.has(seriesKey) || flyers.length === 0) {
+    return;
+  }
+  const removed = await client.promotionDeal.deleteMany({
+    where: { flyerId: { in: flyers.map((flyer) => flyer.id) } }
+  });
+  result.staleDealsRemoved += removed.count;
+  clearedSeries.add(seriesKey);
+}
+
+function recordFailure(
+  result: PromotionRefreshResult,
+  seriesKey: PromotionSeriesKey,
+  message: string
+) {
+  result.parseFailures += 1;
+  result.failures.push({ seriesKey, message });
 }
 
 async function createPendingDeals(
