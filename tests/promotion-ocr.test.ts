@@ -116,6 +116,40 @@ describe("promotion OCR", () => {
     });
   });
 
+  it("fails FairPrice OCR when every detected region fails", async () => {
+    const regions: FairPriceCardRegion[] = [
+      { regionId: "card-1", x: 20, y: 300, width: 300, height: 260 },
+      { regionId: "card-2", x: 340, y: 300, width: 300, height: 260 }
+    ];
+    const onRegionFailure = vi.fn();
+
+    await expect(
+      ocrAssetPages(
+        {
+          assetBytes: Buffer.from("fairprice-page"),
+          assetKind: "image",
+          assetUrl: "https://example.com/unknown-publication.jpg",
+          parserKind: "fairprice-grid"
+        },
+        {
+          loadImage: async () => ({ width: 1404, height: 1824 }),
+          findFairPriceCardRegions: () => regions,
+          cropImage: async (_image, region) =>
+            Buffer.from(region.regionId),
+          recognizeImage: async (bytes) => {
+            throw new Error(`failed ${bytes.toString()}`);
+          },
+          onRegionFailure
+        }
+      )
+    ).rejects.toThrow(
+      "FairPrice flyer OCR failed for all detected card regions"
+    );
+    expect(onRegionFailure).toHaveBeenCalledTimes(2);
+    expect(onRegionFailure.mock.calls.map(([failure]) => failure.regionId))
+      .toEqual(["card-1", "card-2"]);
+  });
+
   it("fails FairPrice OCR when no credible card regions are detected", async () => {
     await expect(
       ocrAssetPages(

@@ -355,6 +355,18 @@ describe("weekly promotion parser", () => {
         })
       ])
     );
+    expect(
+      deals.some((deal) =>
+        /—ema|HEADER|DOVE|Body Wash/i.test(deal.rawTitle)
+      )
+    ).toBe(false);
+    expect(
+      deals.some(
+        (deal) =>
+          deal.rawTitle.includes("Pocky") &&
+          deal.pageNumber === 1
+      )
+    ).toBe(false);
   });
 
   it("rejects fragmented FairPrice OCR without a trustworthy card price", () => {

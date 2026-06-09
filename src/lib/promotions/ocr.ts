@@ -147,12 +147,14 @@ async function recognizeFairPriceGrid(
   const recognizeImage = deps.recognizeImage ?? recognizer!.recognize;
   const textParts: string[] = [];
   const items: PromotionTextItem[] = [];
+  let successfulRegions = 0;
 
   try {
     for (const region of regions) {
       try {
         const crop = await cropImage(image, region);
         const recognized = await recognizeImage(crop);
+        successfulRegions += 1;
         if (recognized.text.trim()) {
           textParts.push(recognized.text.trim());
         }
@@ -174,6 +176,12 @@ async function recognizeFairPriceGrid(
     }
   } finally {
     await recognizer?.terminate();
+  }
+
+  if (successfulRegions === 0) {
+    throw new Error(
+      "FairPrice flyer OCR failed for all detected card regions"
+    );
   }
 
   return {
