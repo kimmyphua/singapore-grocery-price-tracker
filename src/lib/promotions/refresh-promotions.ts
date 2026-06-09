@@ -24,6 +24,10 @@ type PromotionAsset = {
 type StoredFlyer = {
   id: string;
   seriesKey: PromotionSeriesKey;
+  retailerId: string;
+  sourceUrl: string;
+  assetUrl: string;
+  status: "IMPORTED" | "PARSE_FAILED";
   validFrom: Date | null;
   validTo: Date | null;
 };
@@ -34,19 +38,15 @@ type PromotionRefreshClient = {
   };
   promotionFlyer: {
     findMany(args: {
+      where?: { retailer: { slug: PromotionRetailerSlug } };
       select?: Record<string, unknown>;
     }): Promise<StoredFlyer[]>;
     findUnique(args: {
       where: { assetHash: string };
       select?: Record<string, unknown>;
-    }): Promise<{
-      id: string;
-      status?: string;
-      assetPath?: string;
-      _count?: { deals: number };
-    } | null>;
+    }): Promise<(StoredFlyer & { assetPath?: string }) | null>;
     create(args: { data: Record<string, unknown>; select?: { id: true } }): Promise<{ id: string }>;
-    update?(args: {
+    update(args: {
       where: { id: string };
       data: Record<string, unknown>;
       select?: { id: true };
@@ -131,9 +131,16 @@ export async function refreshWeeklyPromotions(
   result.failures.push(...discovery.failures);
 
   const storedFlyers = await client.promotionFlyer.findMany({
+    ...(options.retailerSlug
+      ? { where: { retailer: { slug: options.retailerSlug } } }
+      : {}),
     select: {
       id: true,
       seriesKey: true,
+      retailerId: true,
+      sourceUrl: true,
+      assetUrl: true,
+      status: true,
       validFrom: true,
       validTo: true
     }
@@ -145,13 +152,18 @@ export async function refreshWeeklyPromotions(
       latestStoredFlyer(flyers)
     ])
   );
-  const publications = groupPublications(discovery.sources);
+  const publications = newestPublicationsBySeries(
+    groupPublications(discovery.sources)
+  );
   result.publicationsDiscovered = publications.length;
   const clearedSeries = new Set<PromotionSeriesKey>();
 
   for (const [seriesKey, flyers] of storedBySeries) {
-    const latest = latestStoredFlyer(flyers);
-    if (latest.validTo && latest.validTo.getTime() < now.getTime()) {
+    const latestDated = latestDatedStoredFlyer(flyers);
+    if (
+      latestDated?.validTo &&
+      latestDated.validTo.getTime() < now.getTime()
+    ) {
       await clearSeriesDeals(client, seriesKey, flyers, clearedSeries, result);
     }
   }
@@ -164,8 +176,12 @@ export async function refreshWeeklyPromotions(
     const latest = latestStoredBySeries.get(first.seriesKey);
     if (
       latest?.validFrom &&
-      latest.validFrom.getTime() === first.validFrom.getTime()
+      latest.validFrom.getTime() > first.validFrom.getTime()
     ) {
+      result.publicationsSkipped += 1;
+      continue;
+    }
+    if (isCompleteImportedPublication(publication, storedBySeries)) {
       result.publicationsSkipped += 1;
       continue;
     }
@@ -212,7 +228,7 @@ async function importPromotionPage(
       select: { id: true }
     });
     if (!retailer) {
-      recordFailure(
+      recordImportFailure(
         result,
         source.seriesKey,
         `Retailer not found: ${source.retailerSlug}`
@@ -226,35 +242,73 @@ async function importPromotionPage(
       where: { assetHash },
       select: {
         id: true,
+        seriesKey: true,
+        retailerId: true,
+        sourceUrl: true,
+        assetUrl: true,
+        validFrom: true,
+        validTo: true,
         status: true,
-        assetPath: true,
-        _count: { select: { deals: true } }
+        assetPath: true
       }
     });
 
     if (existingFlyer) {
-      const deals = (await parseAsset({
-        assetBytes: asset.bytes,
-        assetKind: source.assetKind,
-        assetUrl: source.assetUrl,
-        parserKind: source.parserKind
-      })).map((parsedDeal) => ({
-        ...parsedDeal,
-        pageNumber: source.pageNumber
-      }));
-      if (client.promotionFlyer.update) {
+      const removed = await client.promotionDeal.deleteMany({
+        where: { flyerId: { in: [existingFlyer.id] } }
+      });
+      result.staleDealsRemoved += removed.count;
+      try {
+        const deals = (await parseAsset({
+          assetBytes: asset.bytes,
+          assetKind: source.assetKind,
+          assetUrl: source.assetUrl,
+          parserKind: source.parserKind
+        })).map((parsedDeal) => ({
+          ...parsedDeal,
+          pageNumber: source.pageNumber
+        }));
         await client.promotionFlyer.update({
           where: { id: existingFlyer.id },
-          data: { status: "IMPORTED", errorMessage: null },
+          data: {
+            retailerId: retailer.id,
+            seriesKey: source.seriesKey,
+            title: source.title,
+            sourceUrl: source.sourceUrl,
+            assetUrl: source.assetUrl,
+            assetPath: existingFlyer.assetPath ?? source.assetUrl,
+            validFrom: source.validFrom,
+            validTo: source.validTo,
+            status: "IMPORTED",
+            errorMessage: null
+          },
           select: { id: true }
         });
+        result.candidatesCreated += await createPendingDeals(
+          client,
+          existingFlyer.id,
+          retailer.id,
+          deals
+        );
+      } catch (error) {
+        await client.promotionFlyer.update({
+          where: { id: existingFlyer.id },
+          data: {
+            retailerId: retailer.id,
+            seriesKey: source.seriesKey,
+            title: source.title,
+            sourceUrl: source.sourceUrl,
+            assetUrl: source.assetUrl,
+            assetPath: existingFlyer.assetPath ?? source.assetUrl,
+            validFrom: source.validFrom,
+            validTo: source.validTo,
+            status: "PARSE_FAILED",
+            errorMessage: toErrorMessage(error)
+          },
+          select: { id: true }
+        });
+        recordImportFailure(result, source.seriesKey, toErrorMessage(error));
       }
-      result.candidatesCreated += await createPendingDeals(
-        client,
-        existingFlyer.id,
-        retailer.id,
-        deals
-      );
       return;
     }
 
@@ -293,7 +347,7 @@ async function importPromotionPage(
         select: { id: true }
       });
       result.flyersFetched += 1;
-      recordFailure(result, source.seriesKey, toErrorMessage(error));
+      recordImportFailure(result, source.seriesKey, toErrorMessage(error));
       return flyer;
     }
 
@@ -320,7 +374,7 @@ async function importPromotionPage(
       deals
     );
   } catch (error) {
-    recordFailure(result, source.seriesKey, toErrorMessage(error));
+    recordImportFailure(result, source.seriesKey, toErrorMessage(error));
   }
 }
 
@@ -333,6 +387,48 @@ function groupPublications(sources: PromotionSource[]) {
   }
   return [...groups.values()].map((pages) =>
     pages.sort((a, b) => a.pageNumber - b.pageNumber)
+  );
+}
+
+function newestPublicationsBySeries(publications: PromotionSource[][]) {
+  const newest = new Map<PromotionSeriesKey, PromotionSource[]>();
+  for (const publication of publications) {
+    const first = publication[0];
+    if (!first) {
+      continue;
+    }
+    const current = newest.get(first.seriesKey);
+    const currentFirst = current?.[0];
+    if (
+      !currentFirst ||
+      first.validFrom.getTime() > currentFirst.validFrom.getTime() ||
+      (first.validFrom.getTime() === currentFirst.validFrom.getTime() &&
+        first.publicationKey > currentFirst.publicationKey)
+    ) {
+      newest.set(first.seriesKey, publication);
+    }
+  }
+  return [...newest.values()];
+}
+
+function isCompleteImportedPublication(
+  publication: PromotionSource[],
+  storedBySeries: Map<PromotionSeriesKey, StoredFlyer[]>
+) {
+  const first = publication[0];
+  if (!first) {
+    return false;
+  }
+  const stored = storedBySeries.get(first.seriesKey) ?? [];
+  return publication.every((source) =>
+    stored.some(
+      (flyer) =>
+        flyer.status === "IMPORTED" &&
+        flyer.validFrom?.getTime() === source.validFrom.getTime() &&
+        flyer.validTo?.getTime() === source.validTo.getTime() &&
+        flyer.sourceUrl === source.sourceUrl &&
+        flyer.assetUrl === source.assetUrl
+    )
   );
 }
 
@@ -354,6 +450,13 @@ function latestStoredFlyer(flyers: StoredFlyer[]) {
   });
 }
 
+function latestDatedStoredFlyer(flyers: StoredFlyer[]) {
+  const dated = flyers.filter(
+    (flyer) => flyer.validFrom !== null && flyer.validTo !== null
+  );
+  return dated.length > 0 ? latestStoredFlyer(dated) : null;
+}
+
 async function clearSeriesDeals(
   client: PromotionRefreshClient,
   seriesKey: PromotionSeriesKey,
@@ -371,7 +474,7 @@ async function clearSeriesDeals(
   clearedSeries.add(seriesKey);
 }
 
-function recordFailure(
+function recordImportFailure(
   result: PromotionRefreshResult,
   seriesKey: PromotionSeriesKey,
   message: string

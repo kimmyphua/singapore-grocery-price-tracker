@@ -14,6 +14,10 @@ const JUNE_11 = new Date("2026-06-11T00:00:00+08:00");
 type StoredFlyer = {
   id: string;
   seriesKey: PromotionSeriesKey;
+  retailerId: string;
+  sourceUrl: string;
+  assetUrl: string;
+  status: "IMPORTED" | "PARSE_FAILED";
   validFrom: Date | null;
   validTo: Date | null;
 };
@@ -59,7 +63,25 @@ function discovery(
   return { sources, failures };
 }
 
-function createClient(storedFlyers: StoredFlyer[] = []) {
+function storedFlyer(overrides: Partial<StoredFlyer> = {}): StoredFlyer {
+  return {
+    id: "stored-page-1",
+    seriesKey: "fairprice-must-buy",
+    retailerId: "retailer_1",
+    sourceUrl:
+      "https://promotions.fairprice.com.sg/price-drop-buy-now-must-buy/page/1",
+    assetUrl: "https://view.publitas.com/must-buy-page-1.jpg",
+    status: "IMPORTED",
+    validFrom: JUNE_4,
+    validTo: JUNE_10,
+    ...overrides
+  };
+}
+
+function createClient(
+  storedFlyers: StoredFlyer[] = [],
+  existingHashFlyer: (StoredFlyer & { assetPath?: string }) | null = null
+) {
   let createdFlyers = 0;
   const client = {
     retailer: {
@@ -67,10 +89,11 @@ function createClient(storedFlyers: StoredFlyer[] = []) {
     },
     promotionFlyer: {
       findMany: vi.fn(async () => storedFlyers),
-      findUnique: vi.fn(async () => null),
+      findUnique: vi.fn(async () => existingHashFlyer),
       create: vi.fn(async () => ({
         id: `new-flyer-${++createdFlyers}`
-      }))
+      })),
+      update: vi.fn(async () => ({ id: existingHashFlyer?.id ?? "updated" }))
     },
     promotionDeal: {
       findMany: vi.fn(async () => []),
@@ -87,12 +110,9 @@ function createClient(storedFlyers: StoredFlyer[] = []) {
 describe("weekly promotion refresh", () => {
   it("skips an unchanged publication before fetching its assets", async () => {
     const client = createClient([
-      {
+      storedFlyer({
         id: "current-page-1",
-        seriesKey: "fairprice-must-buy",
-        validFrom: JUNE_4,
-        validTo: JUNE_10
-      }
+      })
     ]);
     const fetchAsset = vi.fn();
     const parseAsset = vi.fn();
@@ -116,24 +136,26 @@ describe("weekly promotion refresh", () => {
 
   it("clears only the stale series before importing every page of a newer publication", async () => {
     const client = createClient([
-      {
+      storedFlyer({
         id: "old-must-buy-page-1",
-        seriesKey: "fairprice-must-buy",
         validFrom: new Date("2026-05-28T00:00:00+08:00"),
         validTo: new Date("2026-06-03T23:59:59+08:00")
-      },
-      {
+      }),
+      storedFlyer({
         id: "old-must-buy-page-2",
-        seriesKey: "fairprice-must-buy",
+        sourceUrl:
+          "https://promotions.fairprice.com.sg/price-drop-buy-now-must-buy/page/2",
+        assetUrl: "https://view.publitas.com/old-must-buy-page-2.jpg",
         validFrom: new Date("2026-05-28T00:00:00+08:00"),
         validTo: new Date("2026-06-03T23:59:59+08:00")
-      },
-      {
+      }),
+      storedFlyer({
         id: "current-weekly-savers-page-1",
         seriesKey: "fairprice-weekly-savers",
-        validFrom: JUNE_4,
-        validTo: JUNE_10
-      }
+        sourceUrl:
+          "https://promotions.fairprice.com.sg/price-drop-buy-now-weekly-savers/page/1",
+        assetUrl: "https://view.publitas.com/weekly-savers-page-1.jpg"
+      })
     ]);
     client.promotionDeal.deleteMany.mockResolvedValue({ count: 7 });
     const fetchAsset = vi.fn(async () => ({
@@ -220,12 +242,11 @@ describe("weekly promotion refresh", () => {
 
   it("keeps stale deals cleared and stores a failed flyer when replacement parsing fails", async () => {
     const client = createClient([
-      {
+      storedFlyer({
         id: "old-must-buy-page-1",
-        seriesKey: "fairprice-must-buy",
         validFrom: new Date("2026-05-28T00:00:00+08:00"),
         validTo: new Date("2026-06-03T23:59:59+08:00")
-      }
+      })
     ]);
     client.promotionDeal.deleteMany.mockResolvedValue({ count: 4 });
 
@@ -271,12 +292,12 @@ describe("weekly promotion refresh", () => {
 
   it("clears an expired stored series when no replacement is discovered", async () => {
     const client = createClient([
-      {
+      storedFlyer({
         id: "expired-cold-storage-page-1",
         seriesKey: "cold-storage-grocery-selections",
-        validFrom: JUNE_4,
-        validTo: JUNE_10
-      }
+        sourceUrl: "https://coldstorage.com.sg/weekly-ads/Grocery-Selections-1",
+        assetUrl: "https://coldstorage.com.sg/grocery-selections.jpg"
+      })
     ]);
     client.promotionDeal.deleteMany.mockResolvedValue({ count: 5 });
 
@@ -299,12 +320,9 @@ describe("weekly promotion refresh", () => {
 
   it("clears an expired publication when discovery still returns the same stale dates", async () => {
     const client = createClient([
-      {
+      storedFlyer({
         id: "expired-must-buy-page-1",
-        seriesKey: "fairprice-must-buy",
-        validFrom: JUNE_4,
-        validTo: JUNE_10
-      }
+      })
     ]);
     client.promotionDeal.deleteMany.mockResolvedValue({ count: 2 });
     const fetchAsset = vi.fn();
@@ -329,12 +347,12 @@ describe("weekly promotion refresh", () => {
 
   it("clears an expired series even when discovery for that series fails", async () => {
     const client = createClient([
-      {
+      storedFlyer({
         id: "expired-giant-page-1",
         seriesKey: "giant-super-savings",
-        validFrom: JUNE_4,
-        validTo: JUNE_10
-      }
+        sourceUrl: "https://giant.sg/super-savings",
+        assetUrl: "https://giant.sg/super-savings.pdf"
+      })
     ]);
     client.promotionDeal.deleteMany.mockResolvedValue({ count: 3 });
 
@@ -362,16 +380,17 @@ describe("weekly promotion refresh", () => {
         message: "Giant promotion page request failed"
       }
     ]);
+    expect(result.parseFailures).toBe(0);
   });
 
   it("retains a still-valid series when discovery for that series fails", async () => {
     const client = createClient([
-      {
+      storedFlyer({
         id: "current-cold-storage-page-1",
         seriesKey: "cold-storage-grocery-selections",
-        validFrom: JUNE_4,
-        validTo: JUNE_10
-      }
+        sourceUrl: "https://coldstorage.com.sg/weekly-ads/Grocery-Selections-1",
+        assetUrl: "https://coldstorage.com.sg/grocery-selections.jpg"
+      })
     ]);
 
     const result = await refreshWeeklyPromotions(
@@ -396,5 +415,298 @@ describe("weekly promotion refresh", () => {
         message: "Cold Storage weekly ad unavailable"
       }
     ]);
+    expect(result.parseFailures).toBe(0);
+  });
+
+  it("retries a same-date publication when a discovered page is missing", async () => {
+    const client = createClient([
+      storedFlyer({ id: "current-page-1" })
+    ]);
+    const fetchAsset = vi.fn(async () => ({
+      bytes: Buffer.from("page"),
+      contentType: "image/jpeg"
+    }));
+    const pageTwo = source({
+      title: "FairPrice Must Buy page 2",
+      sourceUrl:
+        "https://promotions.fairprice.com.sg/price-drop-buy-now-must-buy/page/2",
+      assetUrl: "https://view.publitas.com/must-buy-page-2.jpg",
+      pageNumber: 2
+    });
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source(), pageTwo]),
+        fetchAsset,
+        parseAsset: async () => [deal()],
+        writeAsset: async () => "data/flyer.jpg"
+      }
+    );
+
+    expect(result.publicationsSkipped).toBe(0);
+    expect(fetchAsset).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a same-date publication when a stored page previously failed parsing", async () => {
+    const client = createClient([
+      storedFlyer({ id: "failed-page-1", status: "PARSE_FAILED" })
+    ]);
+    const fetchAsset = vi.fn(async () => ({
+      bytes: Buffer.from("page"),
+      contentType: "image/jpeg"
+    }));
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source()]),
+        fetchAsset,
+        parseAsset: async () => [deal()],
+        writeAsset: async () => "data/flyer.jpg"
+      }
+    );
+
+    expect(result.publicationsSkipped).toBe(0);
+    expect(fetchAsset).toHaveBeenCalledOnce();
+  });
+
+  it("updates full flyer identity before attaching deals to an existing asset hash", async () => {
+    const hashFlyer = storedFlyer({
+      id: "shared-hash-flyer",
+      seriesKey: "fairprice-weekly-savers",
+      sourceUrl:
+        "https://promotions.fairprice.com.sg/price-drop-buy-now-weekly-savers/page/1",
+      assetUrl: "https://view.publitas.com/old-shared.jpg",
+      validFrom: new Date("2026-05-28T00:00:00+08:00"),
+      validTo: new Date("2026-06-03T23:59:59+08:00")
+    });
+    const client = createClient([], hashFlyer);
+    client.promotionDeal.deleteMany.mockResolvedValue({ count: 1 });
+
+    await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source()]),
+        fetchAsset: async () => ({
+          bytes: Buffer.from("shared hash"),
+          contentType: "image/jpeg"
+        }),
+        parseAsset: async () => [deal()]
+      }
+    );
+
+    expect(client.promotionDeal.deleteMany).toHaveBeenCalledWith({
+      where: { flyerId: { in: ["shared-hash-flyer"] } }
+    });
+    expect(client.promotionFlyer.update).toHaveBeenCalledWith({
+      where: { id: "shared-hash-flyer" },
+      data: expect.objectContaining({
+        retailerId: "retailer_1",
+        seriesKey: "fairprice-must-buy",
+        sourceUrl: source().sourceUrl,
+        assetUrl: source().assetUrl,
+        validFrom: JUNE_4,
+        validTo: JUNE_10,
+        status: "IMPORTED",
+        errorMessage: null
+      }),
+      select: { id: true }
+    });
+    expect(client.promotionDeal.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ flyerId: "shared-hash-flyer" })]
+      })
+    );
+  });
+
+  it("updates an existing asset hash to PARSE_FAILED when reparsing fails", async () => {
+    const hashFlyer = storedFlyer({
+      id: "shared-hash-flyer",
+      seriesKey: "fairprice-weekly-savers"
+    });
+    const client = createClient([], hashFlyer);
+    client.promotionDeal.deleteMany.mockResolvedValue({ count: 2 });
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source()]),
+        fetchAsset: async () => ({
+          bytes: Buffer.from("shared hash"),
+          contentType: "image/jpeg"
+        }),
+        parseAsset: async () => {
+          throw new Error("OCR failed");
+        }
+      }
+    );
+
+    expect(client.promotionDeal.deleteMany).toHaveBeenCalledWith({
+      where: { flyerId: { in: ["shared-hash-flyer"] } }
+    });
+    expect(client.promotionFlyer.update).toHaveBeenCalledWith({
+      where: { id: "shared-hash-flyer" },
+      data: expect.objectContaining({
+        seriesKey: "fairprice-must-buy",
+        status: "PARSE_FAILED",
+        errorMessage: "OCR failed"
+      }),
+      select: { id: true }
+    });
+    expect(client.promotionDeal.createMany).not.toHaveBeenCalled();
+    expect(result.parseFailures).toBe(1);
+  });
+
+  it("limits stored flyer cleanup to the requested retailer", async () => {
+    const client = createClient([
+      storedFlyer({
+        id: "expired-fairprice",
+        validTo: new Date("2026-06-03T23:59:59+08:00")
+      })
+    ]);
+    client.promotionFlyer.findMany.mockResolvedValueOnce([]);
+
+    await refreshWeeklyPromotions(
+      { retailerSlug: "cold-storage" },
+      {
+        client,
+        now: JUNE_11,
+        discoverSources: async () => discovery([])
+      }
+    );
+
+    expect(client.promotionFlyer.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { retailer: { slug: "cold-storage" } }
+      })
+    );
+    expect(client.promotionDeal.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("imports only the newest discovered publication for each series", async () => {
+    const client = createClient();
+    const fetchAsset = vi.fn(async () => ({
+      bytes: Buffer.from("newest"),
+      contentType: "image/jpeg"
+    }));
+    const older = source({
+      publicationKey: "fairprice-must-buy:2026-05-28",
+      validFrom: new Date("2026-05-28T00:00:00+08:00"),
+      validTo: new Date("2026-06-03T23:59:59+08:00"),
+      assetUrl: "https://view.publitas.com/older.jpg"
+    });
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([older, source()]),
+        fetchAsset,
+        parseAsset: async () => [deal()],
+        writeAsset: async () => "data/flyer.jpg"
+      }
+    );
+
+    expect(result.publicationsDiscovered).toBe(1);
+    expect(fetchAsset).toHaveBeenCalledOnce();
+    expect(fetchAsset).toHaveBeenCalledWith(source());
+  });
+
+  it("does not import an older discovered publication over a newer stored one", async () => {
+    const client = createClient([
+      storedFlyer({ id: "newer-stored-page" })
+    ]);
+    const fetchAsset = vi.fn();
+    const older = source({
+      publicationKey: "fairprice-must-buy:2026-05-28",
+      validFrom: new Date("2026-05-28T00:00:00+08:00"),
+      validTo: new Date("2026-06-03T23:59:59+08:00"),
+      assetUrl: "https://view.publitas.com/older.jpg"
+    });
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([older]),
+        fetchAsset
+      }
+    );
+
+    expect(fetchAsset).not.toHaveBeenCalled();
+    expect(result.publicationsSkipped).toBe(1);
+  });
+
+  it("clears expired dated deals even when a legacy null-validity row exists in the series", async () => {
+    const client = createClient([
+      storedFlyer({
+        id: "expired-dated-page",
+        validTo: JUNE_10
+      }),
+      storedFlyer({
+        id: "legacy-null-page",
+        sourceUrl: "https://legacy.example/flyer",
+        assetUrl: "https://legacy.example/flyer.pdf",
+        validFrom: null,
+        validTo: null
+      })
+    ]);
+
+    await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: JUNE_11,
+        discoverSources: async () => discovery([])
+      }
+    );
+
+    expect(client.promotionDeal.deleteMany).toHaveBeenCalledWith({
+      where: {
+        flyerId: { in: ["expired-dated-page", "legacy-null-page"] }
+      }
+    });
+  });
+
+  it("does not let a newer row with a null end date mask an expired dated publication", async () => {
+    const client = createClient([
+      storedFlyer({
+        id: "expired-dated-page",
+        validTo: JUNE_10
+      }),
+      storedFlyer({
+        id: "legacy-newer-page",
+        sourceUrl: "https://legacy.example/flyer",
+        assetUrl: "https://legacy.example/flyer.pdf",
+        validFrom: JUNE_11,
+        validTo: null
+      })
+    ]);
+
+    await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-12T00:00:00+08:00"),
+        discoverSources: async () => discovery([])
+      }
+    );
+
+    expect(client.promotionDeal.deleteMany).toHaveBeenCalledWith({
+      where: {
+        flyerId: { in: ["expired-dated-page", "legacy-newer-page"] }
+      }
+    });
   });
 });
