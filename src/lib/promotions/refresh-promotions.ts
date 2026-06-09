@@ -222,23 +222,38 @@ async function importPromotionPage(
   writeAsset: NonNullable<PromotionRefreshDeps["writeAsset"]>,
   result: PromotionRefreshResult
 ) {
+  let retailer: { id: string } | null;
   try {
-    const retailer = await client.retailer.findUnique({
+    retailer = await client.retailer.findUnique({
       where: { slug: source.retailerSlug },
       select: { id: true }
     });
-    if (!retailer) {
-      recordImportFailure(
-        result,
-        source.seriesKey,
-        `Retailer not found: ${source.retailerSlug}`
-      );
-      return;
-    }
+  } catch (error) {
+    recordFailure(result, source.seriesKey, toErrorMessage(error));
+    return;
+  }
+  if (!retailer) {
+    recordFailure(
+      result,
+      source.seriesKey,
+      `Retailer not found: ${source.retailerSlug}`
+    );
+    return;
+  }
 
-    const asset = await fetchAsset(source);
-    const assetHash = hashBytes(asset.bytes);
-    const existingFlyer = await client.promotionFlyer.findUnique({
+  let asset: PromotionAsset;
+  try {
+    asset = await fetchAsset(source);
+  } catch (error) {
+    recordFailure(result, source.seriesKey, toErrorMessage(error));
+    return;
+  }
+
+  const rawAssetHash = hashBytes(asset.bytes);
+  const assetHash = hashSourceAsset(source, rawAssetHash);
+  let existingFlyer: (StoredFlyer & { assetPath?: string }) | null;
+  try {
+    existingFlyer = await client.promotionFlyer.findUnique({
       where: { assetHash },
       select: {
         id: true,
@@ -252,45 +267,28 @@ async function importPromotionPage(
         assetPath: true
       }
     });
+  } catch (error) {
+    recordFailure(result, source.seriesKey, toErrorMessage(error));
+    return;
+  }
 
-    if (existingFlyer) {
+  if (existingFlyer) {
+    try {
       const removed = await client.promotionDeal.deleteMany({
         where: { flyerId: { in: [existingFlyer.id] } }
       });
       result.staleDealsRemoved += removed.count;
+    } catch (error) {
+      recordFailure(result, source.seriesKey, toErrorMessage(error));
+      return;
+    }
+
+    let deals: ExtractedPromotionDeal[];
+    try {
+      deals = await parseDealsForSource(source, asset.bytes, parseAsset);
+    } catch (error) {
+      recordParserFailure(result, source.seriesKey, toErrorMessage(error));
       try {
-        const deals = (await parseAsset({
-          assetBytes: asset.bytes,
-          assetKind: source.assetKind,
-          assetUrl: source.assetUrl,
-          parserKind: source.parserKind
-        })).map((parsedDeal) => ({
-          ...parsedDeal,
-          pageNumber: source.pageNumber
-        }));
-        await client.promotionFlyer.update({
-          where: { id: existingFlyer.id },
-          data: {
-            retailerId: retailer.id,
-            seriesKey: source.seriesKey,
-            title: source.title,
-            sourceUrl: source.sourceUrl,
-            assetUrl: source.assetUrl,
-            assetPath: existingFlyer.assetPath ?? source.assetUrl,
-            validFrom: source.validFrom,
-            validTo: source.validTo,
-            status: "IMPORTED",
-            errorMessage: null
-          },
-          select: { id: true }
-        });
-        result.candidatesCreated += await createPendingDeals(
-          client,
-          existingFlyer.id,
-          retailer.id,
-          deals
-        );
-      } catch (error) {
         await client.promotionFlyer.update({
           where: { id: existingFlyer.id },
           data: {
@@ -307,30 +305,69 @@ async function importPromotionPage(
           },
           select: { id: true }
         });
-        recordImportFailure(result, source.seriesKey, toErrorMessage(error));
+      } catch (diagnosticError) {
+        recordFailure(
+          result,
+          source.seriesKey,
+          toErrorMessage(diagnosticError)
+        );
       }
       return;
     }
 
-    const assetPath = await getAssetPathOrRemoteUrl(
-      source,
-      asset,
-      assetHash,
-      writeAsset
-    );
-    let deals: ExtractedPromotionDeal[];
     try {
-      deals = (await parseAsset({
-        assetBytes: asset.bytes,
-        assetKind: source.assetKind,
-        assetUrl: source.assetUrl,
-        parserKind: source.parserKind
-      })).map((parsedDeal) => ({
-        ...parsedDeal,
-        pageNumber: source.pageNumber
-      }));
+      await client.promotionFlyer.update({
+        where: { id: existingFlyer.id },
+        data: {
+          retailerId: retailer.id,
+          seriesKey: source.seriesKey,
+          title: source.title,
+          sourceUrl: source.sourceUrl,
+          assetUrl: source.assetUrl,
+          assetPath: existingFlyer.assetPath ?? source.assetUrl,
+          validFrom: source.validFrom,
+          validTo: source.validTo,
+          status: "IMPORTED",
+          errorMessage: null
+        },
+        select: { id: true }
+      });
     } catch (error) {
-      const flyer = await client.promotionFlyer.create({
+      recordFailure(result, source.seriesKey, toErrorMessage(error));
+      return;
+    }
+    try {
+      result.candidatesCreated += await createPendingDeals(
+        client,
+        existingFlyer.id,
+        retailer.id,
+        deals
+      );
+    } catch (error) {
+      recordFailure(result, source.seriesKey, toErrorMessage(error));
+    }
+    return;
+  }
+
+  let assetPath: string;
+  try {
+    assetPath = await writeAsset(
+      source,
+      asset.bytes,
+      asset.contentType,
+      rawAssetHash
+    );
+  } catch (error) {
+    recordFailure(result, source.seriesKey, toErrorMessage(error));
+    assetPath = source.assetUrl;
+  }
+  let deals: ExtractedPromotionDeal[];
+  try {
+    deals = await parseDealsForSource(source, asset.bytes, parseAsset);
+  } catch (error) {
+    recordParserFailure(result, source.seriesKey, toErrorMessage(error));
+    try {
+      await client.promotionFlyer.create({
         data: {
           retailerId: retailer.id,
           seriesKey: source.seriesKey,
@@ -347,11 +384,15 @@ async function importPromotionPage(
         select: { id: true }
       });
       result.flyersFetched += 1;
-      recordImportFailure(result, source.seriesKey, toErrorMessage(error));
-      return flyer;
+    } catch (diagnosticError) {
+      recordFailure(result, source.seriesKey, toErrorMessage(diagnosticError));
     }
+    return;
+  }
 
-    const flyer = await client.promotionFlyer.create({
+  let flyer: { id: string };
+  try {
+    flyer = await client.promotionFlyer.create({
       data: {
         retailerId: retailer.id,
         seriesKey: source.seriesKey,
@@ -367,6 +408,11 @@ async function importPromotionPage(
       select: { id: true }
     });
     result.flyersFetched += 1;
+  } catch (error) {
+    recordFailure(result, source.seriesKey, toErrorMessage(error));
+    return;
+  }
+  try {
     result.candidatesCreated += await createPendingDeals(
       client,
       flyer.id,
@@ -374,8 +420,24 @@ async function importPromotionPage(
       deals
     );
   } catch (error) {
-    recordImportFailure(result, source.seriesKey, toErrorMessage(error));
+    recordFailure(result, source.seriesKey, toErrorMessage(error));
   }
+}
+
+async function parseDealsForSource(
+  source: PromotionSource,
+  assetBytes: Buffer,
+  parseAsset: NonNullable<PromotionRefreshDeps["parseAsset"]>
+) {
+  return (await parseAsset({
+    assetBytes,
+    assetKind: source.assetKind,
+    assetUrl: source.assetUrl,
+    parserKind: source.parserKind
+  })).map((deal) => ({
+    ...deal,
+    pageNumber: source.pageNumber
+  }));
 }
 
 function groupPublications(sources: PromotionSource[]) {
@@ -474,12 +536,20 @@ async function clearSeriesDeals(
   clearedSeries.add(seriesKey);
 }
 
-function recordImportFailure(
+function recordParserFailure(
   result: PromotionRefreshResult,
   seriesKey: PromotionSeriesKey,
   message: string
 ) {
   result.parseFailures += 1;
+  result.failures.push({ seriesKey, message });
+}
+
+function recordFailure(
+  result: PromotionRefreshResult,
+  seriesKey: PromotionSeriesKey,
+  message: string
+) {
   result.failures.push({ seriesKey, message });
 }
 
@@ -570,19 +640,6 @@ async function fetchPromotionAsset(source: PromotionSource): Promise<PromotionAs
   };
 }
 
-async function getAssetPathOrRemoteUrl(
-  source: PromotionSource,
-  asset: PromotionAsset,
-  assetHash: string,
-  writeAsset: NonNullable<PromotionRefreshDeps["writeAsset"]>
-) {
-  try {
-    return await writeAsset(source, asset.bytes, asset.contentType, assetHash);
-  } catch {
-    return source.assetUrl;
-  }
-}
-
 async function writePromotionAsset(
   source: PromotionSource,
   bytes: Buffer,
@@ -608,6 +665,20 @@ function getAssetExtension(source: PromotionSource, contentType: string | null) 
 
 function hashBytes(bytes: Buffer) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function hashSourceAsset(source: PromotionSource, rawAssetHash: string) {
+  return createHash("sha256")
+    .update(
+      [
+        rawAssetHash,
+        source.seriesKey,
+        source.publicationKey,
+        source.pageNumber,
+        source.sourceUrl
+      ].join("|")
+    )
+    .digest("hex");
 }
 
 function toErrorMessage(error: unknown) {

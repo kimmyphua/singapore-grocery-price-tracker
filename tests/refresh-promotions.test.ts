@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { refreshWeeklyPromotions } from "@/lib/promotions/refresh-promotions";
 import type {
@@ -89,7 +90,7 @@ function createClient(
     },
     promotionFlyer: {
       findMany: vi.fn(async () => storedFlyers),
-      findUnique: vi.fn(async () => existingHashFlyer),
+      findUnique: vi.fn(async (_args: unknown) => existingHashFlyer),
       create: vi.fn(async () => ({
         id: `new-flyer-${++createdFlyers}`
       })),
@@ -475,15 +476,10 @@ describe("weekly promotion refresh", () => {
     expect(fetchAsset).toHaveBeenCalledOnce();
   });
 
-  it("updates full flyer identity before attaching deals to an existing asset hash", async () => {
+  it("reuses an existing asset hash only for the same source identity", async () => {
     const hashFlyer = storedFlyer({
       id: "shared-hash-flyer",
-      seriesKey: "fairprice-weekly-savers",
-      sourceUrl:
-        "https://promotions.fairprice.com.sg/price-drop-buy-now-weekly-savers/page/1",
-      assetUrl: "https://view.publitas.com/old-shared.jpg",
-      validFrom: new Date("2026-05-28T00:00:00+08:00"),
-      validTo: new Date("2026-06-03T23:59:59+08:00")
+      status: "PARSE_FAILED"
     });
     const client = createClient([], hashFlyer);
     client.promotionDeal.deleteMany.mockResolvedValue({ count: 1 });
@@ -528,8 +524,7 @@ describe("weekly promotion refresh", () => {
 
   it("updates an existing asset hash to PARSE_FAILED when reparsing fails", async () => {
     const hashFlyer = storedFlyer({
-      id: "shared-hash-flyer",
-      seriesKey: "fairprice-weekly-savers"
+      id: "shared-hash-flyer"
     });
     const client = createClient([], hashFlyer);
     client.promotionDeal.deleteMany.mockResolvedValue({ count: 2 });
@@ -564,6 +559,167 @@ describe("weekly promotion refresh", () => {
     });
     expect(client.promotionDeal.createMany).not.toHaveBeenCalled();
     expect(result.parseFailures).toBe(1);
+  });
+
+  it("does not find or mutate another retailer flyer with identical bytes", async () => {
+    const bytes = Buffer.from("identical retailer image");
+    const rawHash = createHash("sha256").update(bytes).digest("hex");
+    const foreignFlyer = storedFlyer({
+      id: "foreign-flyer",
+      seriesKey: "fairprice-must-buy"
+    });
+    const client = createClient();
+    client.promotionFlyer.findUnique.mockImplementation(
+      async (args: unknown) => {
+        const { where } = args as { where: { assetHash: string } };
+        return where.assetHash === rawHash ? foreignFlyer : null;
+      }
+    );
+    const coldStorageSource = source({
+      seriesKey: "cold-storage-grocery-selections",
+      publicationKey: "cold-storage-grocery-selections:2026-06-04",
+      retailerSlug: "cold-storage",
+      title: "Cold Storage Grocery Selections",
+      sourceUrl:
+        "https://coldstorage.com.sg/weekly-ads/Grocery-Selections-1",
+      assetUrl: "https://coldstorage.com.sg/grocery-selections.jpg",
+      assetKind: "image",
+      parserKind: "document"
+    });
+
+    await refreshWeeklyPromotions(
+      { retailerSlug: "cold-storage" },
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([coldStorageSource]),
+        fetchAsset: async () => ({
+          bytes,
+          contentType: "image/jpeg"
+        }),
+        parseAsset: async () => [deal()],
+        writeAsset: async () => "data/cold-storage.jpg"
+      }
+    );
+
+    expect(client.promotionFlyer.findUnique).toHaveBeenCalledWith({
+      where: { assetHash: expect.not.stringMatching(rawHash) },
+      select: expect.any(Object)
+    });
+    expect(client.promotionFlyer.update).not.toHaveBeenCalled();
+    expect(client.promotionDeal.deleteMany).not.toHaveBeenCalledWith({
+      where: { flyerId: { in: ["foreign-flyer"] } }
+    });
+    expect(client.promotionFlyer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          seriesKey: "cold-storage-grocery-selections",
+          assetHash: expect.not.stringMatching(rawHash)
+        })
+      })
+    );
+  });
+
+  it("records fetch failures without incrementing parser failures", async () => {
+    const client = createClient();
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source()]),
+        fetchAsset: async () => {
+          throw new Error("upstream request failed");
+        }
+      }
+    );
+
+    expect(result.parseFailures).toBe(0);
+    expect(result.failures).toEqual([
+      {
+        seriesKey: "fairprice-must-buy",
+        message: "upstream request failed"
+      }
+    ]);
+    expect(client.promotionFlyer.create).not.toHaveBeenCalled();
+  });
+
+  it("records archive failures while continuing with the remote asset URL", async () => {
+    const client = createClient();
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source()]),
+        fetchAsset: async () => ({
+          bytes: Buffer.from("remote-only flyer"),
+          contentType: "image/jpeg"
+        }),
+        parseAsset: async () => [deal()],
+        writeAsset: async () => {
+          throw new Error("read-only filesystem");
+        }
+      }
+    );
+
+    expect(result.parseFailures).toBe(0);
+    expect(result.failures).toEqual([
+      {
+        seriesKey: "fairprice-must-buy",
+        message: "read-only filesystem"
+      }
+    ]);
+    expect(client.promotionFlyer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assetPath: source().assetUrl,
+          status: "IMPORTED"
+        })
+      })
+    );
+  });
+
+  it("records deal persistence failures without marking the parsed flyer as failed", async () => {
+    const client = createClient();
+    client.promotionDeal.createMany.mockRejectedValue(
+      new Error("deal insert failed")
+    );
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source()]),
+        fetchAsset: async () => ({
+          bytes: Buffer.from("parsed flyer"),
+          contentType: "image/jpeg"
+        }),
+        parseAsset: async () => [deal()],
+        writeAsset: async () => "data/flyer.jpg"
+      }
+    );
+
+    expect(result.parseFailures).toBe(0);
+    expect(result.failures).toEqual([
+      {
+        seriesKey: "fairprice-must-buy",
+        message: "deal insert failed"
+      }
+    ]);
+    expect(client.promotionFlyer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "IMPORTED" })
+      })
+    );
+    expect(client.promotionFlyer.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "PARSE_FAILED" })
+      })
+    );
   });
 
   it("limits stored flyer cleanup to the requested retailer", async () => {
