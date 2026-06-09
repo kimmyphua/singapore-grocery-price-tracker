@@ -47,13 +47,24 @@ type PublicDealsOptions = {
   retailerSlug?: string;
 };
 
+function activeFlyerWhere(now: Date) {
+  return {
+    flyer: {
+      validFrom: { lte: now },
+      validTo: { gte: now }
+    }
+  };
+}
+
 export async function getApprovedPromotionDeals(
   options: PublicDealsOptions = {},
-  client: PromotionQueryClient = prisma
+  client: PromotionQueryClient = prisma,
+  now = new Date()
 ): Promise<PromotionDealWithRelations[]> {
   const deals = await client.promotionDeal.findMany({
     where: {
       reviewStatus: "APPROVED",
+      ...activeFlyerWhere(now),
       ...(options.category ? { category: options.category } : {}),
       ...(options.retailerSlug ? { retailer: { slug: options.retailerSlug } } : {})
     },
@@ -64,38 +75,63 @@ export async function getApprovedPromotionDeals(
 }
 
 export async function getPendingPromotionDeals(
-  client: PromotionQueryClient = prisma
+  client: PromotionQueryClient = prisma,
+  now = new Date()
 ): Promise<PromotionDealWithRelations[]> {
   const deals = await client.promotionDeal.findMany({
-    where: { reviewStatus: "PENDING" },
+    where: {
+      reviewStatus: "PENDING",
+      ...activeFlyerWhere(now)
+    },
     include: { flyer: true, retailer: true },
     orderBy: [{ createdAt: "desc" }]
   });
   return deals as PromotionDealWithRelations[];
 }
 
-export async function getPromotionReviewCounts(client: PromotionQueryClient = prisma) {
+export async function getPromotionReviewCounts(
+  client: PromotionQueryClient = prisma,
+  now = new Date()
+) {
   const count = client.promotionDeal.count;
   if (!count) {
     return { approvedCount: 0, rejectedCount: 0 };
   }
 
   const [approvedCount, rejectedCount] = await Promise.all([
-    count({ where: { reviewStatus: "APPROVED" } }),
-    count({ where: { reviewStatus: "REJECTED" } })
+    count({
+      where: {
+        reviewStatus: "APPROVED",
+        ...activeFlyerWhere(now)
+      }
+    }),
+    count({
+      where: {
+        reviewStatus: "REJECTED",
+        ...activeFlyerWhere(now)
+      }
+    })
   ]);
   return { approvedCount, rejectedCount };
 }
 
 export async function getRetailersWithApprovedPromotions(
-  client: PromotionQueryClient = prisma
+  client: PromotionQueryClient = prisma,
+  now = new Date()
 ): Promise<PromotionRetailerOption[]> {
   if (!client.retailer) {
     return [];
   }
 
   const retailers = await client.retailer.findMany({
-    where: { promotionDeals: { some: { reviewStatus: "APPROVED" } } },
+    where: {
+      promotionDeals: {
+        some: {
+          reviewStatus: "APPROVED",
+          ...activeFlyerWhere(now)
+        }
+      }
+    },
     orderBy: { name: "asc" }
   });
   return retailers as PromotionRetailerOption[];
