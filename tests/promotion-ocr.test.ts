@@ -3,6 +3,7 @@ import {
   createTesseractWorker,
   findFairPriceCardRegions,
   installPdfJsCanvasGlobals,
+  installPdfJsWorker,
   ocrAssetPages,
   type FairPriceCardRegion
 } from "@/lib/promotions/ocr";
@@ -27,6 +28,20 @@ describe("promotion OCR", () => {
       DOMMatrix: TestDOMMatrix,
       ImageData: TestImageData,
       Path2D: TestPath2D
+    });
+  });
+
+  it("installs the bundled PDF.js worker before document parsing", () => {
+    class TestWorkerMessageHandler {}
+    const target: Record<string, unknown> = {};
+
+    installPdfJsWorker(
+      { WorkerMessageHandler: TestWorkerMessageHandler },
+      target
+    );
+
+    expect(target.pdfjsWorker).toEqual({
+      WorkerMessageHandler: TestWorkerMessageHandler
     });
   });
 

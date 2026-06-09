@@ -36,6 +36,10 @@ type PdfJsCanvasGlobals = {
   Path2D?: unknown;
 };
 
+type PdfJsWorkerRuntime = {
+  WorkerMessageHandler?: unknown;
+};
+
 export type PromotionOcrDeps = {
   loadImage?: (bytes: Buffer) => Promise<PromotionImage>;
   findFairPriceCardRegions?: (
@@ -706,6 +710,10 @@ async function renderPdfPages(assetBytes: Buffer) {
 async function loadPdfJsRuntime() {
   const canvasRuntime = await loadRuntimeModule<any>("@napi-rs/canvas");
   installPdfJsCanvasGlobals(canvasRuntime);
+  const workerRuntime = await loadRuntimeModule<any>(
+    "pdfjs-dist/legacy/build/pdf.worker.mjs"
+  );
+  installPdfJsWorker(workerRuntime);
   return loadRuntimeModule<any>("pdfjs-dist/legacy/build/pdf.mjs");
 }
 
@@ -717,6 +725,20 @@ export function installPdfJsCanvasGlobals(
     if (target[key] === undefined && canvasRuntime[key] !== undefined) {
       target[key] = canvasRuntime[key];
     }
+  }
+}
+
+export function installPdfJsWorker(
+  workerRuntime: PdfJsWorkerRuntime,
+  target: Record<string, unknown> = globalThis as Record<string, unknown>
+) {
+  if (
+    target.pdfjsWorker === undefined &&
+    workerRuntime.WorkerMessageHandler !== undefined
+  ) {
+    target.pdfjsWorker = {
+      WorkerMessageHandler: workerRuntime.WorkerMessageHandler
+    };
   }
 }
 
@@ -823,6 +845,9 @@ export function parseTesseractTsv(
 async function loadRuntimeModule<T>(specifier: string): Promise<T> {
   if (specifier === "pdfjs-dist/legacy/build/pdf.mjs") {
     return (await import("pdfjs-dist/legacy/build/pdf.mjs")) as T;
+  }
+  if (specifier === "pdfjs-dist/legacy/build/pdf.worker.mjs") {
+    return (await import("pdfjs-dist/legacy/build/pdf.worker.mjs")) as T;
   }
   if (specifier === "@napi-rs/canvas") {
     const importer = new Function(
