@@ -135,6 +135,7 @@ model ScrapeRun {
 
 model PromotionFlyer {
   id           String               @id @default(cuid())
+  seriesKey    String
   retailerId   String
   title        String
   sourceUrl    String
@@ -153,6 +154,8 @@ model PromotionFlyer {
   deals    PromotionDeal[]
 
   @@index([retailerId])
+  @@index([seriesKey, validFrom])
+  @@index([seriesKey, validTo])
   @@index([validFrom, validTo])
 }
 
