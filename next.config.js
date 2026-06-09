@@ -4,6 +4,7 @@ const nextConfig = {
     outputFileTracingIncludes: {
       "/api/promotions/refresh": [
         "./node_modules/@napi-rs/canvas*/**/*",
+        "./node_modules/pdfjs-dist/**/*",
         "./node_modules/tesseract.js/src/**/*",
         "./node_modules/tesseract.js-core/**/*",
         "./node_modules/regenerator-runtime/**/*",
@@ -13,7 +14,7 @@ const nextConfig = {
         "./node_modules/node-fetch/**/*"
       ]
     },
-    serverComponentsExternalPackages: ["@napi-rs/canvas"]
+    serverComponentsExternalPackages: ["@napi-rs/canvas", "pdfjs-dist"]
   }
 };
 
