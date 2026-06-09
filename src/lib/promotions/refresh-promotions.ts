@@ -683,6 +683,10 @@ async function writePromotionAsset(
   contentType: string | null,
   hash: string
 ) {
+  if (process.env.VERCEL) {
+    return source.assetUrl;
+  }
+
   const directory = path.join(process.cwd(), "data", "weekly-ads", source.retailerSlug);
   await mkdir(directory, { recursive: true });
   const assetPath = path.join(directory, `${hash}.${getAssetExtension(source, contentType)}`);

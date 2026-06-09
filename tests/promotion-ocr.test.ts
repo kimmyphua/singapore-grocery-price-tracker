@@ -2,11 +2,34 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createTesseractWorker,
   findFairPriceCardRegions,
+  installPdfJsCanvasGlobals,
   ocrAssetPages,
   type FairPriceCardRegion
 } from "@/lib/promotions/ocr";
 
 describe("promotion OCR", () => {
+  it("installs canvas geometry globals before PDF.js is imported", () => {
+    class TestDOMMatrix {}
+    class TestImageData {}
+    class TestPath2D {}
+    const target: Record<string, unknown> = {};
+
+    installPdfJsCanvasGlobals(
+      {
+        DOMMatrix: TestDOMMatrix,
+        ImageData: TestImageData,
+        Path2D: TestPath2D
+      },
+      target
+    );
+
+    expect(target).toEqual({
+      DOMMatrix: TestDOMMatrix,
+      ImageData: TestImageData,
+      Path2D: TestPath2D
+    });
+  });
+
   it("starts Tesseract with the packaged Node worker path", async () => {
     const worker = { recognize: vi.fn(), terminate: vi.fn() };
     const createWorker = vi.fn(async () => worker);

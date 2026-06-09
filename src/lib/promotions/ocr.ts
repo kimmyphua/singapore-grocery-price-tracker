@@ -30,6 +30,12 @@ export type PromotionImage = {
 
 type RecognizedImage = Omit<PromotionTextPage, "pageNumber">;
 
+type PdfJsCanvasGlobals = {
+  DOMMatrix?: unknown;
+  ImageData?: unknown;
+  Path2D?: unknown;
+};
+
 export type PromotionOcrDeps = {
   loadImage?: (bytes: Buffer) => Promise<PromotionImage>;
   findFairPriceCardRegions?: (
@@ -53,9 +59,7 @@ export async function extractTextPages(
     return ocrAssetPages(input);
   }
 
-  const pdfjs = await loadRuntimeModule<any>(
-    "pdfjs-dist/legacy/build/pdf.mjs"
-  );
+  const pdfjs = await loadPdfJsRuntime();
   const document = await pdfjs.getDocument({
     data: new Uint8Array(input.assetBytes),
     disableFontFace: true,
@@ -663,10 +667,12 @@ async function defaultCropImage(
 }
 
 async function renderPdfPages(assetBytes: Buffer) {
-  const [{ createCanvas }, pdfjs] = await Promise.all([
-    loadRuntimeModule<any>("@napi-rs/canvas"),
-    loadRuntimeModule<any>("pdfjs-dist/legacy/build/pdf.mjs")
-  ]);
+  const canvasRuntime = await loadRuntimeModule<any>("@napi-rs/canvas");
+  installPdfJsCanvasGlobals(canvasRuntime);
+  const pdfjs = await loadRuntimeModule<any>(
+    "pdfjs-dist/legacy/build/pdf.mjs"
+  );
+  const { createCanvas } = canvasRuntime;
   const document = await pdfjs.getDocument({
     data: new Uint8Array(assetBytes),
     disableFontFace: true,
@@ -695,6 +701,23 @@ async function renderPdfPages(assetBytes: Buffer) {
   }
 
   return pages;
+}
+
+async function loadPdfJsRuntime() {
+  const canvasRuntime = await loadRuntimeModule<any>("@napi-rs/canvas");
+  installPdfJsCanvasGlobals(canvasRuntime);
+  return loadRuntimeModule<any>("pdfjs-dist/legacy/build/pdf.mjs");
+}
+
+export function installPdfJsCanvasGlobals(
+  canvasRuntime: PdfJsCanvasGlobals,
+  target: Record<string, unknown> = globalThis as Record<string, unknown>
+) {
+  for (const key of ["DOMMatrix", "ImageData", "Path2D"] as const) {
+    if (target[key] === undefined && canvasRuntime[key] !== undefined) {
+      target[key] = canvasRuntime[key];
+    }
+  }
 }
 
 async function recognizeImagePage(

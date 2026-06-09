@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { refreshWeeklyPromotions } from "@/lib/promotions/refresh-promotions";
 import type {
   ExtractedPromotionDeal,
@@ -109,6 +109,10 @@ function createClient(
 }
 
 describe("weekly promotion refresh", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("skips an unchanged publication before fetching its assets", async () => {
     const client = createClient([
       storedFlyer({
@@ -717,6 +721,35 @@ describe("weekly promotion refresh", () => {
         message: "read-only filesystem"
       }
     ]);
+    expect(client.promotionFlyer.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assetPath: source().assetUrl,
+          status: "IMPORTED"
+        })
+      })
+    );
+  });
+
+  it("uses the remote asset URL on Vercel without attempting local archival", async () => {
+    vi.stubEnv("VERCEL", "1");
+    const client = createClient();
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source()]),
+        fetchAsset: async () => ({
+          bytes: Buffer.from("serverless flyer"),
+          contentType: "image/jpeg"
+        }),
+        parseAsset: async () => [deal()]
+      }
+    );
+
+    expect(result.failures).toEqual([]);
     expect(client.promotionFlyer.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
