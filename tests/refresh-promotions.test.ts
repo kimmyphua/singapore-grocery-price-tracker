@@ -448,7 +448,9 @@ describe("weekly promotion refresh", () => {
     );
 
     expect(result.publicationsSkipped).toBe(0);
-    expect(fetchAsset).toHaveBeenCalledTimes(2);
+    expect(fetchAsset).toHaveBeenCalledOnce();
+    expect(fetchAsset).toHaveBeenCalledWith(pageTwo);
+    expect(client.promotionDeal.deleteMany).not.toHaveBeenCalled();
   });
 
   it("retries a same-date publication when a stored page previously failed parsing", async () => {
@@ -474,6 +476,49 @@ describe("weekly promotion refresh", () => {
 
     expect(result.publicationsSkipped).toBe(0);
     expect(fetchAsset).toHaveBeenCalledOnce();
+  });
+
+  it("removes only the superseded page when one same-date asset changes", async () => {
+    const pageTwo = source({
+      title: "FairPrice Must Buy page 2",
+      sourceUrl:
+        "https://promotions.fairprice.com.sg/price-drop-buy-now-must-buy/page/2",
+      assetUrl: "https://view.publitas.com/must-buy-page-2-new.jpg",
+      pageNumber: 2
+    });
+    const client = createClient([
+      storedFlyer({ id: "current-page-1" }),
+      storedFlyer({
+        id: "old-page-2",
+        sourceUrl: pageTwo.sourceUrl,
+        assetUrl: "https://view.publitas.com/must-buy-page-2-old.jpg"
+      })
+    ]);
+    client.promotionDeal.deleteMany.mockResolvedValue({ count: 4 });
+    const fetchAsset = vi.fn(async () => ({
+      bytes: Buffer.from("new page two"),
+      contentType: "image/jpeg"
+    }));
+
+    const result = await refreshWeeklyPromotions(
+      {},
+      {
+        client,
+        now: new Date("2026-06-07T12:00:00+08:00"),
+        discoverSources: async () => discovery([source(), pageTwo]),
+        fetchAsset,
+        parseAsset: async () => [deal()],
+        writeAsset: async () => "data/page-2.jpg"
+      }
+    );
+
+    expect(fetchAsset).toHaveBeenCalledOnce();
+    expect(fetchAsset).toHaveBeenCalledWith(pageTwo);
+    expect(client.promotionDeal.deleteMany).toHaveBeenCalledOnce();
+    expect(client.promotionDeal.deleteMany).toHaveBeenCalledWith({
+      where: { flyerId: { in: ["old-page-2"] } }
+    });
+    expect(result.staleDealsRemoved).toBe(4);
   });
 
   it("reuses an existing asset hash only for the same source identity", async () => {

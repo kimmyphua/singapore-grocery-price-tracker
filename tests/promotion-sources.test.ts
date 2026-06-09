@@ -39,7 +39,7 @@ async function promotionPages() {
       await fixture("sheng-siong-post.html")
     ],
     [
-      "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/",
+      "https://corporate.shengsiong.com.sg/newspaper-advertisement-4-jun-2026-10-jun-2026/",
       await fixture("sheng-siong-post-weekend.html")
     ],
     [
@@ -149,7 +149,7 @@ describe("promotion source discovery", () => {
         expect.objectContaining({
           seriesKey: "sheng-siong-newspaper-advertisement",
           publicationKey:
-            "sheng-siong-newspaper-advertisement:2026-06-03T16:00:00.000Z:weekly-special-4-jun-2026-10-jun-2026",
+            "sheng-siong-newspaper-advertisement:2026-06-03T16:00:00.000Z:newspaper-advertisement-4-jun-2026-10-jun-2026",
           retailerSlug: "sheng-siong",
           parserKind: "document",
           pageNumber: 1,
@@ -356,6 +356,62 @@ describe("promotion source discovery", () => {
     });
   });
 
+  it("discovers the Cold Storage flyer image embedded in Next.js data", async () => {
+    const pages = await promotionPages();
+    pages.set(
+      "https://coldstorage.com.sg/weekly-ads/Grocery-Selections-1",
+      [
+        "<html><body>",
+        "<h1>Grocery Selections (Till 10 June)</h1>",
+        '<script id="__NEXT_DATA__" type="application/json">',
+        JSON.stringify({
+          props: {
+            pageProps: {
+              ad: {
+                image:
+                  "https://csp.coldstorage.com.sg/media/weeklydeals/385/grocery-selections-20260604.jpg"
+              }
+            }
+          }
+        }),
+        "</script>",
+        "</body></html>"
+      ].join("")
+    );
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "cold-storage",
+      now: new Date("2026-06-08T04:00:00.000Z")
+    });
+
+    expect(result.sources).toEqual([
+      expect.objectContaining({
+        assetKind: "image",
+        assetUrl:
+          "https://csp.coldstorage.com.sg/media/weeklydeals/385/grocery-selections-20260604.jpg"
+      })
+    ]);
+  });
+
+  it("skips upcoming FairPrice and Cold Storage publications", async () => {
+    const pages = await promotionPages();
+
+    const fairPrice = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "fairprice",
+      now: new Date("2026-06-03T04:00:00.000Z")
+    });
+    const coldStorage = await discoverPromotionSources({
+      fetcher: createFetcher(pages),
+      retailerSlug: "cold-storage",
+      now: new Date("2026-06-03T04:00:00.000Z")
+    });
+
+    expect(fairPrice).toEqual({ sources: [], failures: [] });
+    expect(coldStorage).toEqual({ sources: [], failures: [] });
+  });
+
   it("treats a fetched Sheng Siong listing with no dated flyer as empty", async () => {
     const pages = new Map([
       [
@@ -372,6 +428,32 @@ describe("promotion source discovery", () => {
     expect(result).toEqual({ sources: [], failures: [] });
   });
 
+  it("does not treat generic Sheng Siong promotions as newspaper flyers", async () => {
+    const listingUrl =
+      "https://corporate.shengsiong.com.sg/category/promotions/newspaper-advertisement/";
+    const requests: string[] = [];
+    const pages = new Map([
+      [
+        listingUrl,
+        [
+          "<html><body>",
+          '<article><a href="/blk-336-smith-street-b1-300-01-304-7-days-special-05-june-2026-11-june-2026/">Store special</a></article>',
+          '<article><a href="/mega-promotion-15-may-2026-11-june-2026/">Mega promotion</a></article>',
+          "</body></html>"
+        ].join("")
+      ]
+    ]);
+
+    const result = await discoverPromotionSources({
+      fetcher: createFetcher(pages, requests),
+      retailerSlug: "sheng-siong",
+      now: new Date("2026-06-08T04:00:00.000Z")
+    });
+
+    expect(result).toEqual({ sources: [], failures: [] });
+    expect(requests).toEqual([listingUrl]);
+  });
+
   it("ignores navigation and emits only the current Sheng Siong post", async () => {
     const pages = await promotionPages();
     const requests: string[] = [];
@@ -386,22 +468,22 @@ describe("promotion source discovery", () => {
     expect(result.sources).toEqual([
       expect.objectContaining({
         sourceUrl:
-          "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/"
+          "https://corporate.shengsiong.com.sg/newspaper-advertisement-4-jun-2026-10-jun-2026/"
       })
     ]);
     expect(requests).toEqual([
       "https://corporate.shengsiong.com.sg/category/promotions/newspaper-advertisement/",
-      "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/"
+      "https://corporate.shengsiong.com.sg/newspaper-advertisement-4-jun-2026-10-jun-2026/"
     ]);
   });
 
   it("treats stale and future Sheng Siong posts as a successful empty result", async () => {
     const pages = await promotionPages();
     pages.delete(
-      "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/"
+      "https://corporate.shengsiong.com.sg/newspaper-advertisement-4-jun-2026-10-jun-2026/"
     );
     pages.set(
-      "https://corporate.shengsiong.com.sg/weekly-special-4-jun-2026-10-jun-2026/",
+      "https://corporate.shengsiong.com.sg/newspaper-advertisement-4-jun-2026-10-jun-2026/",
       "<html><body><p>No flyer asset.</p></body></html>"
     );
 

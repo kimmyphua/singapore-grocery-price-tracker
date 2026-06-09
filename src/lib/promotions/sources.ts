@@ -61,8 +61,8 @@ const DISCOVERY_TASKS: DiscoveryTask[] = [
   ...FAIRPRICE_SERIES.map(({ seriesKey, url }) => ({
     seriesKey,
     retailerSlug: "fairprice" as const,
-    discover: (fetcher: PromotionFetch) =>
-      discoverFairPriceSeries(fetcher, seriesKey, url)
+    discover: (fetcher: PromotionFetch, now: Date) =>
+      discoverFairPriceSeries(fetcher, seriesKey, url, now)
   })),
   {
     seriesKey: "giant-super-savings",
@@ -121,7 +121,8 @@ export async function discoverPromotionSources(
 async function discoverFairPriceSeries(
   fetcher: PromotionFetch,
   seriesKey: (typeof FAIRPRICE_SERIES)[number]["seriesKey"],
-  url: string
+  url: string,
+  now: Date
 ): Promise<PromotionSource[]> {
   const [metadata, spreads] = await Promise.all([
     fetchJson<PublitasMetadata>(fetcher, `${url}/data.json`),
@@ -130,6 +131,9 @@ async function discoverFairPriceSeries(
   const dates = parsePromotionDateRange(
     metadata.config.publicationOriginalTitle
   );
+  if (!isDateActive(dates, now)) {
+    return [];
+  }
 
   return spreads.flatMap((spread) =>
     spread.pages.map((page) => ({
@@ -265,7 +269,7 @@ function isShengSiongPostHref(href: string | undefined): href is string {
   }
 
   return (
-    /special|promotion|advertisement/.test(path) &&
+    /newspaper-advertisement/.test(path) &&
     /\d{1,2}[-/](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[-/]\d{4}/.test(
       path
     )
@@ -281,7 +285,8 @@ function normalizedUrlSlug(value: string) {
 }
 
 async function discoverColdStorage(
-  fetcher: PromotionFetch
+  fetcher: PromotionFetch,
+  now: Date
 ): Promise<PromotionSource[]> {
   const listingHtml = await fetchText(fetcher, COLD_STORAGE_LISTING_URL);
   const detailUrl = findLink(
@@ -300,9 +305,13 @@ async function discoverColdStorage(
   }
 
   const dates = parsePromotionDateRange(title, { defaultDurationDays: 7 });
+  if (!isDateActive(dates, now)) {
+    return [];
+  }
   const assetUrl =
     findPdfUrl(detailHtml, detailUrl) ??
-    findPrimaryImageUrl(detailHtml, detailUrl);
+    findPrimaryImageUrl(detailHtml, detailUrl) ??
+    findColdStoragePayloadImageUrl(detailHtml);
   if (!assetUrl) {
     return [];
   }
@@ -386,6 +395,70 @@ function findPrimaryImageUrl(html: string, baseUrl: string) {
     );
   const source = image ? getImageSource($(image).attr() ?? {}) : null;
   return source ? new URL(decodeHtml(source), baseUrl).toString() : null;
+}
+
+function findColdStoragePayloadImageUrl(html: string) {
+  const $ = cheerio.load(html);
+  for (const script of $('script[type="application/json"]').toArray()) {
+    try {
+      const image = findColdStorageWeeklyAdImage(
+        JSON.parse($(script).text()) as unknown
+      );
+      if (image) {
+        return image;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  const rscMatch = html.match(
+    /\\"image\\":\\"(https:\/\/csp\.coldstorage\.com\.sg\/media\/weeklydeals\/[^"\\]+?\.(?:jpe?g|png|webp))\\"/i
+  );
+  return rscMatch?.[1] ?? null;
+}
+
+function findColdStorageWeeklyAdImage(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const image = findColdStorageWeeklyAdImage(item);
+      if (image) {
+        return image;
+      }
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.image === "string" &&
+    isColdStorageWeeklyAdImage(record.image)
+  ) {
+    return record.image;
+  }
+  for (const child of Object.values(record)) {
+    const image = findColdStorageWeeklyAdImage(child);
+    if (image) {
+      return image;
+    }
+  }
+  return null;
+}
+
+function isColdStorageWeeklyAdImage(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.hostname === "csp.coldstorage.com.sg" &&
+      url.pathname.includes("/media/weeklydeals/") &&
+      /\.(?:jpe?g|png|webp)$/i.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function getImageSource(attributes: Record<string, string>) {

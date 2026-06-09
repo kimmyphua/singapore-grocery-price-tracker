@@ -181,25 +181,47 @@ export async function refreshWeeklyPromotions(
       result.publicationsSkipped += 1;
       continue;
     }
-    if (isCompleteImportedPublication(publication, storedBySeries)) {
+    const storedForSeries = storedBySeries.get(first.seriesKey) ?? [];
+    const pendingPages = publication.filter(
+      (source) => !isImportedSource(source, storedForSeries)
+    );
+    if (pendingPages.length === 0) {
       result.publicationsSkipped += 1;
       continue;
     }
 
-    if (
+    const isNewerPublication =
       !latest?.validFrom ||
-      first.validFrom.getTime() > latest.validFrom.getTime()
-    ) {
+      first.validFrom.getTime() > latest.validFrom.getTime();
+    const hasMatchingImportedPage = publication.some((source) =>
+      isImportedSource(source, storedForSeries)
+    );
+    const replacesSameDatePublication =
+      latest?.validFrom?.getTime() === first.validFrom.getTime() &&
+      !hasMatchingImportedPage;
+    if (isNewerPublication || replacesSameDatePublication) {
       await clearSeriesDeals(
         client,
         first.seriesKey,
-        storedBySeries.get(first.seriesKey) ?? [],
+        storedForSeries,
         clearedSeries,
         result
       );
     }
 
-    for (const source of publication) {
+    const pagesToImport =
+      isNewerPublication || replacesSameDatePublication
+        ? publication
+        : pendingPages;
+    for (const source of pagesToImport) {
+      if (!isNewerPublication && !replacesSameDatePublication) {
+        await clearSupersededPageDeals(
+          client,
+          source,
+          storedForSeries,
+          result
+        );
+      }
       await importPromotionPage(
         source,
         client,
@@ -473,25 +495,40 @@ function newestPublicationsBySeries(publications: PromotionSource[][]) {
   return [...newest.values()];
 }
 
-function isCompleteImportedPublication(
-  publication: PromotionSource[],
-  storedBySeries: Map<PromotionSeriesKey, StoredFlyer[]>
+function isImportedSource(source: PromotionSource, stored: StoredFlyer[]) {
+  return stored.some(
+    (flyer) =>
+      flyer.status === "IMPORTED" &&
+      flyer.validFrom?.getTime() === source.validFrom.getTime() &&
+      flyer.validTo?.getTime() === source.validTo.getTime() &&
+      flyer.sourceUrl === source.sourceUrl &&
+      flyer.assetUrl === source.assetUrl
+  );
+}
+
+async function clearSupersededPageDeals(
+  client: PromotionRefreshClient,
+  source: PromotionSource,
+  stored: StoredFlyer[],
+  result: PromotionRefreshResult
 ) {
-  const first = publication[0];
-  if (!first) {
-    return false;
-  }
-  const stored = storedBySeries.get(first.seriesKey) ?? [];
-  return publication.every((source) =>
-    stored.some(
+  const supersededFlyerIds = stored
+    .filter(
       (flyer) =>
-        flyer.status === "IMPORTED" &&
         flyer.validFrom?.getTime() === source.validFrom.getTime() &&
         flyer.validTo?.getTime() === source.validTo.getTime() &&
         flyer.sourceUrl === source.sourceUrl &&
-        flyer.assetUrl === source.assetUrl
+        flyer.assetUrl !== source.assetUrl
     )
-  );
+    .map((flyer) => flyer.id);
+  if (supersededFlyerIds.length === 0) {
+    return;
+  }
+
+  const removed = await client.promotionDeal.deleteMany({
+    where: { flyerId: { in: supersededFlyerIds } }
+  });
+  result.staleDealsRemoved += removed.count;
 }
 
 function groupStoredFlyers(storedFlyers: StoredFlyer[]) {

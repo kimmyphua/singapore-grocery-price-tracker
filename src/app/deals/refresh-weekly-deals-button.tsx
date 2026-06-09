@@ -12,6 +12,7 @@ type RefreshResult = {
   flyersFetched: number;
   candidatesCreated: number;
   parseFailures: number;
+  failures: Array<{ seriesKey: string; message: string }>;
 };
 
 export function RefreshWeeklyDealsButton() {
@@ -27,9 +28,20 @@ export function RefreshWeeklyDealsButton() {
         throw new Error("Refresh failed");
       }
       const result = (await response.json()) as RefreshResult;
-      setSummary(
-        `${result.staleDealsRemoved} stale deals removed, ${result.flyersFetched} flyer pages imported, ${result.candidatesCreated} review candidates, ${result.publicationsSkipped} unchanged publications skipped.`
-      );
+      const resultSummary =
+        `${result.staleDealsRemoved} stale deals removed, ${result.flyersFetched} flyer pages imported, ${result.candidatesCreated} review candidates, ${result.publicationsSkipped} unchanged publication${result.publicationsSkipped === 1 ? "" : "s"} skipped.`
+      if (result.failures.length > 0 || result.parseFailures > 0) {
+        const failureCount = Math.max(
+          result.failures.length,
+          result.parseFailures
+        );
+        setSummary(
+          `${resultSummary} ${failureCount} flyer${failureCount === 1 ? "" : "s"} failed to refresh; stale deals may have been cleared.`
+        );
+        setState("error");
+        return;
+      }
+      setSummary(resultSummary);
       setState("done");
       if (result.candidatesCreated > 0) {
         window.location.href = `/admin/promotions?imported=${result.candidatesCreated}`;

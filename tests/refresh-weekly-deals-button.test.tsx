@@ -77,4 +77,46 @@ describe("RefreshWeeklyDealsButton", () => {
     expect(await screen.findByText("Weekly deals refresh failed. Try again in a moment.")).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
+
+  it("reports partial refresh failures without navigating away", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            publicationsDiscovered: 4,
+            publicationsSkipped: 1,
+            staleDealsRemoved: 12,
+            flyersFetched: 2,
+            candidatesCreated: 3,
+            parseFailures: 1,
+            failures: [
+              {
+                seriesKey: "cold-storage-grocery-selections",
+                message: "No trustworthy deal cards found"
+              }
+            ]
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+          }
+        )
+      )
+    );
+
+    render(<RefreshWeeklyDealsButton />);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh weekly deals" }));
+
+    expect(
+      await screen.findByText(
+        "12 stale deals removed, 2 flyer pages imported, 3 review candidates, 1 unchanged publication skipped. 1 flyer failed to refresh; stale deals may have been cleared."
+      )
+    ).toBeInTheDocument();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
 });
