@@ -184,7 +184,8 @@ describe("promotion source discovery", () => {
 
     const result = await discoverPromotionSources({
       fetcher: createFetcher(pages),
-      retailerSlug: "fairprice"
+      retailerSlug: "fairprice",
+      now: new Date("2026-06-08T04:00:00.000Z")
     });
 
     expect(result.failures).toEqual([
@@ -340,7 +341,8 @@ describe("promotion source discovery", () => {
 
     const result = await discoverPromotionSources({
       fetcher: createFetcher(pages),
-      retailerSlug: "cold-storage"
+      retailerSlug: "cold-storage",
+      now: new Date("2026-06-08T04:00:00.000Z")
     });
 
     expect(result).toEqual({
