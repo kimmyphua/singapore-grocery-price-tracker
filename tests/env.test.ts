@@ -12,4 +12,17 @@ describe("server environment", () => {
       })
     ).toMatchObject({ legacyOwnerEmail: "owner@example.com" });
   });
+
+  it.each(["ftp://example.com", "javascript:alert(1)"])(
+    "rejects a non-http Supabase URL: %s",
+    (supabaseUrl) => {
+      expect(() =>
+        parseServerEnv({
+          NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
+          LEGACY_OWNER_EMAIL: "owner@example.com"
+        })
+      ).toThrow("NEXT_PUBLIC_SUPABASE_URL");
+    }
+  );
 });
