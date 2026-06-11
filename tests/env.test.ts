@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import { parseServerEnv } from "@/lib/env";
 
@@ -25,4 +26,14 @@ describe("server environment", () => {
       ).toThrow("NEXT_PUBLIC_SUPABASE_URL");
     }
   );
+
+  it("reports malformed Supabase URLs as structured validation errors", () => {
+    expect(() =>
+      parseServerEnv({
+        NEXT_PUBLIC_SUPABASE_URL: "not-a-url",
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
+        LEGACY_OWNER_EMAIL: "owner@example.com"
+      })
+    ).toThrow(z.ZodError);
+  });
 });

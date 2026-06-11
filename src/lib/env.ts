@@ -4,7 +4,7 @@ const serverEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z
     .string()
     .url()
-    .refine((value) => ["http:", "https:"].includes(new URL(value).protocol)),
+    .refine((value) => /^https?:\/\//i.test(value)),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   LEGACY_OWNER_EMAIL: z.string().email()
 });
