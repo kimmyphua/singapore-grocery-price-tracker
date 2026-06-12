@@ -12,15 +12,28 @@ export type AuthContext = {
 export type AuthSessionErrorCode =
   | "SESSION_MISSING"
   | "SESSION_EXPIRED"
-  | "SESSION_INVALID";
+  | "SESSION_INVALID"
+  | "SESSION_PROVIDER_ERROR";
+
+export type AuthProviderErrorCause = {
+  name: string;
+  status?: number;
+  code?: string;
+};
 
 export class AuthSessionError extends Error {
   readonly code: AuthSessionErrorCode;
+  override readonly cause?: AuthProviderErrorCause;
 
-  constructor(code: AuthSessionErrorCode, message: string) {
+  constructor(
+    code: AuthSessionErrorCode,
+    message: string,
+    cause?: AuthProviderErrorCause
+  ) {
     super(message);
     this.name = "AuthSessionError";
     this.code = code;
+    this.cause = cause;
   }
 }
 
@@ -68,6 +81,81 @@ const verifiedClaimsSchema = z.object({
   session_id: z.string().uuid()
 });
 
+const authErrorSchema = z.object({
+  name: z.string().optional(),
+  status: z.number().optional(),
+  code: z.string().optional()
+});
+
+function sanitizeProviderCause(error: unknown): AuthProviderErrorCause {
+  const parsed = authErrorSchema.safeParse(error);
+
+  if (!parsed.success) {
+    return { name: "UnknownProviderError" };
+  }
+
+  return {
+    name: parsed.data.name ?? "UnknownProviderError",
+    ...(parsed.data.status === undefined
+      ? {}
+      : { status: parsed.data.status }),
+    ...(parsed.data.code === undefined ? {} : { code: parsed.data.code })
+  };
+}
+
+function authErrorCode(error: unknown): AuthSessionErrorCode {
+  const parsed = authErrorSchema.safeParse(error);
+
+  if (!parsed.success) {
+    return "SESSION_PROVIDER_ERROR";
+  }
+
+  if (parsed.data.name === "AuthSessionMissingError") {
+    return "SESSION_MISSING";
+  }
+
+  if (
+    parsed.data.name === "AuthInvalidJwtError" ||
+    (parsed.data.status !== undefined &&
+      parsed.data.status >= 400 &&
+      parsed.data.status < 500 &&
+      parsed.data.status !== 429)
+  ) {
+    return "SESSION_INVALID";
+  }
+
+  return "SESSION_PROVIDER_ERROR";
+}
+
+function throwAuthResultError(error: unknown): never {
+  const code = authErrorCode(error);
+
+  if (code === "SESSION_MISSING") {
+    throw new AuthSessionError(
+      code,
+      "An authenticated Supabase user is required."
+    );
+  }
+
+  if (code === "SESSION_INVALID") {
+    throw new AuthSessionError(code, "The Supabase session is invalid.");
+  }
+
+  throw new AuthSessionError(
+    code,
+    "The authentication provider is temporarily unavailable.",
+    sanitizeProviderCause(error)
+  );
+}
+
+function throwProviderError(error: unknown): never {
+  throw new AuthSessionError(
+    "SESSION_PROVIDER_ERROR",
+    "The authentication provider is temporarily unavailable.",
+    sanitizeProviderCause(error)
+  );
+}
+
 const prismaSessionDb: AppSessionDb = {
   upsertProfile({ supabaseUserId, email }) {
     return prisma.userProfile.upsert({
@@ -99,14 +187,15 @@ export async function requireAppSession(
   let userResult: Awaited<ReturnType<AuthAdapter["getUser"]>>;
   try {
     userResult = await auth.getUser();
-  } catch {
-    throw new AuthSessionError(
-      "SESSION_MISSING",
-      "An authenticated Supabase user is required."
-    );
+  } catch (error) {
+    throwProviderError(error);
   }
 
-  if (userResult.error || !userResult.data.user) {
+  if (userResult.error) {
+    throwAuthResultError(userResult.error);
+  }
+
+  if (!userResult.data.user) {
     throw new AuthSessionError(
       "SESSION_MISSING",
       "An authenticated Supabase user is required."
@@ -124,17 +213,18 @@ export async function requireAppSession(
   let claimsResult: Awaited<ReturnType<AuthAdapter["getClaims"]>>;
   try {
     claimsResult = await auth.getClaims();
-  } catch {
-    throw new AuthSessionError(
-      "SESSION_INVALID",
-      "Supabase session claims could not be verified."
-    );
+  } catch (error) {
+    throwProviderError(error);
   }
 
-  if (claimsResult.error || !claimsResult.data) {
+  if (claimsResult.error) {
+    throwAuthResultError(claimsResult.error);
+  }
+
+  if (!claimsResult.data) {
     throw new AuthSessionError(
-      "SESSION_INVALID",
-      "Supabase session claims could not be verified."
+      "SESSION_MISSING",
+      "An authenticated Supabase user is required."
     );
   }
 

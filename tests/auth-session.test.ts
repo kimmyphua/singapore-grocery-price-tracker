@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  AuthApiError,
+  AuthInvalidJwtError,
+  AuthRetryableFetchError,
+  AuthSessionMissingError
+} from "@supabase/auth-js";
 
 const { cookieStore, createBrowserClientMock, createServerClientMock } = vi.hoisted(
   () => ({
@@ -105,6 +111,30 @@ describe("Supabase client factories", () => {
       httpOnly: true
     });
   });
+
+  it("ignores cookie writes rejected by a read-only Server Component store", async () => {
+    cookieStore.getAll.mockReturnValue([]);
+    cookieStore.set.mockImplementation(() => {
+      throw new Error(
+        "Cookies can only be modified in a Server Action or Route Handler."
+      );
+    });
+    createServerClientMock.mockReturnValue({ kind: "server" });
+
+    await createSupabaseServerClient();
+    const options = createServerClientMock.mock.calls[0]?.[2];
+
+    expect(() =>
+      options.cookies.setAll([
+        {
+          name: "sb-token",
+          value: "refreshed",
+          options: { httpOnly: true }
+        }
+      ])
+    ).not.toThrow();
+    expect(cookieStore.set).toHaveBeenCalledOnce();
+  });
 });
 
 describe("requireAppSession", () => {
@@ -139,7 +169,7 @@ describe("requireAppSession", () => {
     const auth = createAuth({
       getUser: vi.fn(async () => ({
         data: { user: null },
-        error: new Error("Auth session missing")
+        error: new AuthSessionMissingError()
       }))
     });
 
@@ -152,11 +182,26 @@ describe("requireAppSession", () => {
     expect(auth.getClaims).not.toHaveBeenCalled();
   });
 
-  it("rejects claims that Supabase could not verify", async () => {
+  it("treats an absent user without an auth error as a missing session", async () => {
     const auth = createAuth({
-      getClaims: vi.fn(async () => ({
-        data: null,
-        error: new Error("Invalid JWT")
+      getUser: vi.fn(async () => ({
+        data: { user: null },
+        error: null
+      }))
+    });
+
+    await expect(
+      requireAppSession({ auth, db: createDb() })
+    ).rejects.toMatchObject({
+      code: "SESSION_MISSING"
+    });
+  });
+
+  it("treats a rejected access token as an invalid session", async () => {
+    const auth = createAuth({
+      getUser: vi.fn(async () => ({
+        data: { user: null },
+        error: new AuthApiError("JWT expired", 401, "bad_jwt")
       }))
     });
 
@@ -164,6 +209,95 @@ describe("requireAppSession", () => {
       requireAppSession({ auth, db: createDb() })
     ).rejects.toMatchObject({
       code: "SESSION_INVALID"
+    });
+  });
+
+  it("treats a rejected verified JWT as an invalid session", async () => {
+    const auth = createAuth({
+      getClaims: vi.fn(async () => ({
+        data: null,
+        error: new AuthInvalidJwtError("Invalid JWT signature")
+      }))
+    });
+
+    await expect(
+      requireAppSession({ auth, db: createDb() })
+    ).rejects.toMatchObject({
+      code: "SESSION_INVALID"
+    });
+  });
+
+  it("reports returned provider failures without leaking provider details", async () => {
+    const auth = createAuth({
+      getUser: vi.fn(async () => ({
+        data: { user: null },
+        error: new AuthRetryableFetchError(
+          "upstream secret response body",
+          503
+        )
+      }))
+    });
+
+    const error = await requireAppSession({
+      auth,
+      db: createDb()
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      name: "AuthSessionError",
+      code: "SESSION_PROVIDER_ERROR",
+      message: "The authentication provider is temporarily unavailable.",
+      cause: {
+        name: "AuthRetryableFetchError",
+        status: 503
+      }
+    });
+    expect(JSON.stringify(error)).not.toContain("upstream secret");
+  });
+
+  it("reports thrown provider failures with a sanitized cause", async () => {
+    const auth = createAuth({
+      getUser: vi.fn(async () => {
+        throw new TypeError("fetch failed for bearer secret-token");
+      })
+    });
+
+    const error = await requireAppSession({
+      auth,
+      db: createDb()
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: "SESSION_PROVIDER_ERROR",
+      cause: {
+        name: "TypeError"
+      }
+    });
+    expect(error).not.toHaveProperty("cause.message");
+    expect(JSON.stringify(error)).not.toContain("secret-token");
+  });
+
+  it("reports claims transport failures as provider errors", async () => {
+    const auth = createAuth({
+      getClaims: vi.fn(async () => ({
+        data: null,
+        error: new AuthApiError(
+          "service unavailable with sensitive details",
+          502,
+          "bad_gateway"
+        )
+      }))
+    });
+
+    await expect(
+      requireAppSession({ auth, db: createDb() })
+    ).rejects.toMatchObject({
+      code: "SESSION_PROVIDER_ERROR",
+      cause: {
+        name: "AuthApiError",
+        status: 502,
+        code: "bad_gateway"
+      }
     });
   });
 
