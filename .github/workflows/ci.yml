@@ -8,6 +8,20 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: grocery
+          POSTGRES_PASSWORD: grocery
+          POSTGRES_DB: grocery_price_tracker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U grocery -d grocery_price_tracker"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://grocery:grocery@localhost:5432/grocery_price_tracker?schema=public
       DIRECT_URL: postgresql://grocery:grocery@localhost:5432/grocery_price_tracker?schema=public
@@ -18,6 +32,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npm run test:migrations
+        env:
+          MIGRATION_TEST_DATABASE_URL: postgresql://grocery:grocery@localhost:5432/grocery_price_tracker?schema=public
       - run: npx prisma validate
       - run: npm run typecheck
       - run: npm run lint

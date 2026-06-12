@@ -7,6 +7,10 @@ const migrationPath =
 const migration = existsSync(migrationPath)
   ? readFileSync(migrationPath, "utf8")
   : "";
+const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+  scripts?: Record<string, string>;
+};
+const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 
 describe("multi-user schema", () => {
   it("defines private products joined to shared listings", () => {
@@ -103,5 +107,17 @@ describe("multi-user schema", () => {
     }
 
     expect(migration).not.toMatch(/\bCREATE\s+POLICY\b/i);
+  });
+
+  it("runs migration behavior checks against PostgreSQL 15 in CI", () => {
+    expect(packageJson.scripts?.["test:migrations"]).toBe(
+      "vitest run tests/migration-behavior.test.ts",
+    );
+    expect(ciWorkflow).toContain("image: postgres:15");
+    expect(ciWorkflow).toContain(
+      "MIGRATION_TEST_DATABASE_URL: postgresql://grocery:grocery@localhost:5432/grocery_price_tracker?schema=public",
+    );
+    expect(ciWorkflow).toContain("run: npx prisma migrate deploy");
+    expect(ciWorkflow).toContain("run: npm run test:migrations");
   });
 });
