@@ -1,6 +1,9 @@
 import { products, retailers } from "@/lib/data/seed-data";
+import { requireProtectedPage } from "@/lib/auth/guards";
 
-export default function MatchReviewPage() {
+export default async function MatchReviewPage() {
+  await requireProtectedPage();
+
   return (
     <div className="space-y-5">
       <div>

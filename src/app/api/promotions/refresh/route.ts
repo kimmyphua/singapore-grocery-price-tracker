@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { appSessionErrorResponse } from "@/lib/auth/guards";
+import { requireAppSession } from "@/lib/auth/session";
 import {
   refreshWeeklyPromotions,
   type PromotionRefreshResult
@@ -11,6 +13,16 @@ export const preferredRegion = "hnd1";
 const RETAILER_SLUGS = new Set(["fairprice", "giant", "sheng-siong", "cold-storage"]);
 
 export async function POST(request: Request) {
+  try {
+    await requireAppSession();
+  } catch (error) {
+    const response = appSessionErrorResponse(error);
+    if (response) {
+      return response;
+    }
+    throw error;
+  }
+
   const body = await request.json().catch(() => ({}));
   const retailerSlug = typeof body.retailerSlug === "string" ? body.retailerSlug : undefined;
   if (retailerSlug && !RETAILER_SLUGS.has(retailerSlug)) {

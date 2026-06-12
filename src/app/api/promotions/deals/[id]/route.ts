@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { appSessionErrorResponse } from "@/lib/auth/guards";
+import { requireAppSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -7,6 +9,16 @@ const CATEGORIES = new Set(["SNACKS", "ICE_CREAM"]);
 const REVIEW_STATUSES = new Set(["PENDING", "APPROVED", "REJECTED"]);
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+  try {
+    await requireAppSession();
+  } catch (error) {
+    const response = appSessionErrorResponse(error);
+    if (response) {
+      return response;
+    }
+    throw error;
+  }
+
   const body = await request.json().catch(() => ({}));
   const data: Record<string, unknown> = {};
 

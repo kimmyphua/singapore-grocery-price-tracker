@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { requireProtectedPage } from "@/lib/auth/guards";
 import { getApprovedPromotionDeals, getRetailersWithApprovedPromotions } from "@/lib/promotions/queries";
 import { RefreshWeeklyDealsButton } from "./refresh-weekly-deals-button";
 
@@ -17,6 +18,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default async function DealsPage({ searchParams }: DealsPageProps) {
+  await requireProtectedPage();
   const selectedCategory = isCategory(searchParams?.category) ? searchParams?.category : undefined;
   const selectedRetailer = searchParams?.retailer;
   const [retailers, deals] = await Promise.all([

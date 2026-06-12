@@ -1,6 +1,9 @@
 import { products } from "@/lib/data/seed-data";
+import { requireProtectedPage } from "@/lib/auth/guards";
 
-export default function ProductsPage() {
+export default async function ProductsPage() {
+  await requireProtectedPage();
+
   return (
     <div className="space-y-5">
       <div>

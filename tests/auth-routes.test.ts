@@ -366,4 +366,25 @@ describe("middleware", () => {
     expect(loginResponse.headers.get("location")).toBeNull();
     expect(callbackResponse.headers.get("location")).toBeNull();
   });
+
+  it("does not turn middleware provider failures into login redirects", async () => {
+    createServerClientMock.mockReturnValue({
+      auth: {
+        getUser: vi.fn(async () => ({
+          data: { user: null },
+          error: {
+            name: "AuthRetryableFetchError",
+            status: 503
+          }
+        }))
+      }
+    });
+
+    const response = await middleware(
+      new NextRequest("https://prices.example/products")
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
 });

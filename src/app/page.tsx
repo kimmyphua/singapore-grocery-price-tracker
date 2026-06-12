@@ -1,4 +1,5 @@
 import { products, retailers } from "@/lib/data/seed-data";
+import { requireProtectedPage } from "@/lib/auth/guards";
 import type { LatestPrice } from "@/lib/data/seed-data";
 import { formatSingaporeDateTime } from "@/lib/format/date-time";
 import { getCachedLatestPrices } from "@/lib/pricing/cached-prices";
@@ -7,6 +8,7 @@ import { RefreshButton } from "./refresh-button";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  await requireProtectedPage();
   const latestPrices = await getCachedLatestPrices();
   const comparablePrices = latestPrices.filter((price) => price.effectiveUnitPrice !== null);
   const trackedProducts = products.length;

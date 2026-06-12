@@ -39,7 +39,8 @@ export async function middleware(request: NextRequest) {
 
   if (
     !PUBLIC_AUTH_PATHS.has(request.nextUrl.pathname) &&
-    (userResult.error || !userResult.data.user)
+    !userResult.error &&
+    !userResult.data.user
   ) {
     const destination = request.nextUrl.clone();
     destination.pathname = "/login";

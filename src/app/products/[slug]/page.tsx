@@ -1,4 +1,5 @@
 import { products, retailers } from "@/lib/data/seed-data";
+import { requireProtectedPage } from "@/lib/auth/guards";
 import type { LatestPrice, PriceHistory, WeeklyPriceHistorySort } from "@/lib/data/seed-data";
 import { getCachedLatestPrices, getCachedWeeklyPriceHistory } from "@/lib/pricing/cached-prices";
 import { notFound } from "next/navigation";
@@ -21,6 +22,7 @@ export default async function ProductDetailPage({
   params: { slug: string };
   searchParams?: ProductDetailSearchParams;
 }) {
+  await requireProtectedPage();
   const product = products.find((item) => item.slug === params.slug);
   if (!product) {
     notFound();

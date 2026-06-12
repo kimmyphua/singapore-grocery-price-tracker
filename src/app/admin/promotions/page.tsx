@@ -1,4 +1,5 @@
 import { RefreshWeeklyDealsButton } from "@/app/deals/refresh-weekly-deals-button";
+import { requireProtectedPage } from "@/lib/auth/guards";
 import { getPendingPromotionDeals, getPromotionReviewCounts } from "@/lib/promotions/queries";
 import { BulkApprovePromotionReviews, PromotionReviewActions } from "./promotion-review-actions";
 
@@ -9,6 +10,7 @@ export default async function AdminPromotionsPage({
 }: {
   searchParams?: { imported?: string };
 }) {
+  await requireProtectedPage();
   const [pendingDeals, counts] = await Promise.all([
     getPendingPromotionDeals(),
     getPromotionReviewCounts()
