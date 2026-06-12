@@ -30,8 +30,13 @@ describe("multi-user schema", () => {
     expect(schema).toContain("@@index([ownerId, isActive])");
     expect(schema).toContain("@@unique([trackedProductId, retailerId])");
     expect(schema).toContain("@@unique([trackedProductId, retailerListingId])");
+    expect(schema).toContain("@@unique([id, retailerId])");
     expect(schema).toContain("@@index([retailerListingId])");
+    expect(schema).toContain("@@index([retailerId])");
     expect(schema).toContain("@@index([retailerListingId, startedAt])");
+    expect(schema).toMatch(
+      /retailerListing\s+RetailerListing\s+@relation\(fields: \[retailerListingId, retailerId\], references: \[id, retailerId\], onDelete: Restrict\)/,
+    );
   });
 
   it("adds the multi-user tables without removing canonical products", () => {
@@ -66,7 +71,13 @@ describe("multi-user schema", () => {
       'CREATE UNIQUE INDEX "TrackedProductListing_trackedProductId_retailerListingId_key"',
     );
     expect(migration).toContain(
-      'ALTER TABLE "TrackedProductListing" ADD CONSTRAINT "TrackedProductListing_retailerListingId_fkey"',
+      'CREATE UNIQUE INDEX "RetailerListing_id_retailerId_key" ON "RetailerListing"("id", "retailerId");',
+    );
+    expect(migration).toContain(
+      'CREATE INDEX "TrackedProductListing_retailerId_idx" ON "TrackedProductListing"("retailerId");',
+    );
+    expect(migration).toContain(
+      'ALTER TABLE "TrackedProductListing" ADD CONSTRAINT "TrackedProductListing_retailerListingId_retailerId_fkey" FOREIGN KEY ("retailerListingId", "retailerId") REFERENCES "RetailerListing"("id", "retailerId") ON DELETE RESTRICT ON UPDATE CASCADE;',
     );
     expect(migration).toContain(
       'ALTER TABLE "ScrapeAttempt" ADD CONSTRAINT "ScrapeAttempt_retailerListingId_fkey"',
@@ -75,5 +86,22 @@ describe("multi-user schema", () => {
     expect(migration).not.toContain('DROP TABLE "CanonicalProduct"');
     expect(migration).not.toContain('DROP COLUMN "canonicalProductId"');
     expect(migration).not.toContain('UPDATE "RetailerListing"');
+  });
+
+  it("enables RLS on every private table without public policies", () => {
+    for (const tableName of [
+      "UserProfile",
+      "LoginIntent",
+      "AppSession",
+      "TrackedProduct",
+      "TrackedProductListing",
+      "ScrapeAttempt",
+    ]) {
+      expect(migration).toContain(
+        `ALTER TABLE "${tableName}" ENABLE ROW LEVEL SECURITY;`,
+      );
+    }
+
+    expect(migration).not.toMatch(/\bCREATE\s+POLICY\b/i);
   });
 });

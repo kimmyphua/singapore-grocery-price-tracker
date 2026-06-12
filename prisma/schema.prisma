@@ -174,6 +174,7 @@ model RetailerListing {
   scrapeAttempts         ScrapeAttempt[]
 
   @@unique([retailerId, productUrl])
+  @@unique([id, retailerId])
   @@index([canonicalProductId])
 }
 
@@ -185,12 +186,13 @@ model TrackedProductListing {
   createdAt         DateTime @default(now())
 
   trackedProduct  TrackedProduct  @relation(fields: [trackedProductId], references: [id], onDelete: Cascade)
-  retailerListing RetailerListing @relation(fields: [retailerListingId], references: [id], onDelete: Restrict)
+  retailerListing RetailerListing @relation(fields: [retailerListingId, retailerId], references: [id, retailerId], onDelete: Restrict)
   retailer        Retailer        @relation(fields: [retailerId], references: [id], onDelete: Restrict)
 
   @@unique([trackedProductId, retailerId])
   @@unique([trackedProductId, retailerListingId])
   @@index([retailerListingId])
+  @@index([retailerId])
 }
 
 model ScrapeAttempt {

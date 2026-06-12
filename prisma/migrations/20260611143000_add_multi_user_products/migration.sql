@@ -113,6 +113,9 @@ CREATE UNIQUE INDEX "TrackedProduct_ownerId_slug_key" ON "TrackedProduct"("owner
 CREATE INDEX "TrackedProduct_ownerId_isActive_idx" ON "TrackedProduct"("ownerId", "isActive");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "RetailerListing_id_retailerId_key" ON "RetailerListing"("id", "retailerId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "TrackedProductListing_trackedProductId_retailerId_key" ON "TrackedProductListing"("trackedProductId", "retailerId");
 
 -- CreateIndex
@@ -120,6 +123,9 @@ CREATE UNIQUE INDEX "TrackedProductListing_trackedProductId_retailerListingId_ke
 
 -- CreateIndex
 CREATE INDEX "TrackedProductListing_retailerListingId_idx" ON "TrackedProductListing"("retailerListingId");
+
+-- CreateIndex
+CREATE INDEX "TrackedProductListing_retailerId_idx" ON "TrackedProductListing"("retailerId");
 
 -- CreateIndex
 CREATE INDEX "ScrapeAttempt_retailerListingId_startedAt_idx" ON "ScrapeAttempt"("retailerListingId", "startedAt");
@@ -134,10 +140,28 @@ ALTER TABLE "TrackedProduct" ADD CONSTRAINT "TrackedProduct_ownerId_fkey" FOREIG
 ALTER TABLE "TrackedProductListing" ADD CONSTRAINT "TrackedProductListing_trackedProductId_fkey" FOREIGN KEY ("trackedProductId") REFERENCES "TrackedProduct"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "TrackedProductListing" ADD CONSTRAINT "TrackedProductListing_retailerListingId_fkey" FOREIGN KEY ("retailerListingId") REFERENCES "RetailerListing"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "TrackedProductListing" ADD CONSTRAINT "TrackedProductListing_retailerListingId_retailerId_fkey" FOREIGN KEY ("retailerListingId", "retailerId") REFERENCES "RetailerListing"("id", "retailerId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "TrackedProductListing" ADD CONSTRAINT "TrackedProductListing_retailerId_fkey" FOREIGN KEY ("retailerId") REFERENCES "Retailer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ScrapeAttempt" ADD CONSTRAINT "ScrapeAttempt_retailerListingId_fkey" FOREIGN KEY ("retailerListingId") REFERENCES "RetailerListing"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- EnableRowLevelSecurity
+ALTER TABLE "UserProfile" ENABLE ROW LEVEL SECURITY;
+
+-- EnableRowLevelSecurity
+ALTER TABLE "LoginIntent" ENABLE ROW LEVEL SECURITY;
+
+-- EnableRowLevelSecurity
+ALTER TABLE "AppSession" ENABLE ROW LEVEL SECURITY;
+
+-- EnableRowLevelSecurity
+ALTER TABLE "TrackedProduct" ENABLE ROW LEVEL SECURITY;
+
+-- EnableRowLevelSecurity
+ALTER TABLE "TrackedProductListing" ENABLE ROW LEVEL SECURITY;
+
+-- EnableRowLevelSecurity
+ALTER TABLE "ScrapeAttempt" ENABLE ROW LEVEL SECURITY;
