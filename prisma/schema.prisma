@@ -37,6 +37,24 @@ enum PromotionReviewStatus {
   REJECTED
 }
 
+enum AppSessionDuration {
+  ONE_DAY
+  THIRTY_DAYS
+}
+
+enum ScrapeTrigger {
+  ONBOARDING
+  MANUAL
+  SCHEDULED
+}
+
+enum ScrapeAttemptStatus {
+  STARTED
+  COMPLETED
+  FAILED
+  BLOCKED
+}
+
 model Retailer {
   id        String   @id @default(cuid())
   slug      String   @unique
@@ -47,10 +65,67 @@ model Retailer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  listings        RetailerListing[]
-  scrapeRuns      ScrapeRun[]
-  promotionFlyers PromotionFlyer[]
-  promotionDeals  PromotionDeal[]
+  listings               RetailerListing[]
+  scrapeRuns             ScrapeRun[]
+  promotionFlyers        PromotionFlyer[]
+  promotionDeals         PromotionDeal[]
+  trackedProductListings TrackedProductListing[]
+}
+
+model UserProfile {
+  id             String           @id @default(cuid())
+  supabaseUserId String           @unique @db.Uuid
+  email          String           @unique
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  products       TrackedProduct[]
+  sessions       AppSession[]
+}
+
+model LoginIntent {
+  id         String             @id @default(cuid())
+  nonceHash  String             @unique
+  duration   AppSessionDuration
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime           @default(now())
+
+  @@index([expiresAt])
+}
+
+model AppSession {
+  id                String      @id @default(cuid())
+  profileId         String
+  supabaseSessionId String      @unique @db.Uuid
+  expiresAt         DateTime
+  createdAt         DateTime    @default(now())
+  profile           UserProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, expiresAt])
+}
+
+model TrackedProduct {
+  id        String   @id @default(cuid())
+  ownerId   String
+  slug      String
+  name      String
+  brand     String
+  family    String
+  flavour   String?
+  packCount Int
+  unitSize  Float
+  unit      String
+  totalSize Float
+  imageUrl  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner    UserProfile             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  listings TrackedProductListing[]
+
+  @@unique([ownerId, slug])
+  @@index([ownerId, isActive])
 }
 
 model CanonicalProduct {
@@ -92,12 +167,46 @@ model RetailerListing {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  retailer         Retailer          @relation(fields: [retailerId], references: [id])
-  canonicalProduct CanonicalProduct? @relation(fields: [canonicalProductId], references: [id])
-  priceSnapshots   PriceSnapshot[]
+  retailer               Retailer                @relation(fields: [retailerId], references: [id])
+  canonicalProduct       CanonicalProduct?       @relation(fields: [canonicalProductId], references: [id])
+  priceSnapshots         PriceSnapshot[]
+  trackedProductListings TrackedProductListing[]
+  scrapeAttempts         ScrapeAttempt[]
 
   @@unique([retailerId, productUrl])
   @@index([canonicalProductId])
+}
+
+model TrackedProductListing {
+  id                String   @id @default(cuid())
+  trackedProductId  String
+  retailerListingId String
+  retailerId        String
+  createdAt         DateTime @default(now())
+
+  trackedProduct  TrackedProduct  @relation(fields: [trackedProductId], references: [id], onDelete: Cascade)
+  retailerListing RetailerListing @relation(fields: [retailerListingId], references: [id], onDelete: Restrict)
+  retailer        Retailer        @relation(fields: [retailerId], references: [id], onDelete: Restrict)
+
+  @@unique([trackedProductId, retailerId])
+  @@unique([trackedProductId, retailerListingId])
+  @@index([retailerListingId])
+}
+
+model ScrapeAttempt {
+  id                String              @id @default(cuid())
+  retailerListingId String
+  trigger           ScrapeTrigger
+  status            ScrapeAttemptStatus @default(STARTED)
+  errorCategory     String?
+  errorMessage      String?
+  snapshotStored    Boolean             @default(false)
+  startedAt         DateTime            @default(now())
+  completedAt       DateTime?
+
+  retailerListing RetailerListing @relation(fields: [retailerListingId], references: [id], onDelete: Cascade)
+
+  @@index([retailerListingId, startedAt])
 }
 
 model PriceSnapshot {
