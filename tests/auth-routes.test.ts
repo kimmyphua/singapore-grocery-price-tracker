@@ -18,17 +18,18 @@ vi.mock("@supabase/ssr", async (importOriginal) => {
 });
 
 import {
+  getLoginRequestContext,
   sendMagicLink,
   type LoginRequestDependencies
-} from "@/app/login/page";
+} from "@/lib/auth/login";
 import {
   handleAuthCallback,
   type AuthCallbackDependencies
-} from "@/app/auth/callback/route";
+} from "@/lib/auth/callback";
 import {
   handleSignOut,
   type SignOutDependencies
-} from "@/app/auth/signout/route";
+} from "@/lib/auth/signout";
 import { middleware } from "../middleware";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -36,16 +37,23 @@ const SESSION_ID = "22222222-2222-4222-8222-222222222222";
 
 function createIntentStore(): LoginIntentStore & {
   createdDurations: LoginIntentDuration[];
+  invalidated: string[];
 } {
   const createdDurations: LoginIntentDuration[] = [];
+  const invalidated: string[] = [];
 
   return {
     createdDurations,
-    async create(input) {
+    invalidated,
+    async reserve(input) {
       createdDurations.push(input.duration);
+      return { created: true };
     },
     async consume() {
       return { duration: createdDurations.at(-1) ?? "ONE_DAY" };
+    },
+    async invalidate(nonceHash) {
+      invalidated.push(nonceHash);
     }
   };
 }
@@ -58,7 +66,8 @@ describe("login request", () => {
       error: null
     }));
     const dependencies: LoginRequestDependencies = {
-      origin: "https://prices.example",
+      appOrigin: "https://prices.example",
+      requesterKey: "203.0.113.4",
       now: new Date("2026-06-12T00:00:00.000Z"),
       intents,
       auth: { signInWithOtp }
@@ -97,7 +106,8 @@ describe("login request", () => {
       }
     }));
     const dependencies: LoginRequestDependencies = {
-      origin: "https://prices.example",
+      appOrigin: "https://prices.example",
+      requesterKey: "203.0.113.4",
       intents: createIntentStore(),
       auth: { signInWithOtp }
     };
@@ -123,6 +133,58 @@ describe("login request", () => {
       message: "Too many sign-in attempts. Try again later."
     });
   });
+
+  it("invalidates the reserved intent when Supabase does not send", async () => {
+    const intents = createIntentStore();
+    const dependencies: LoginRequestDependencies = {
+      appOrigin: "https://prices.example",
+      requesterKey: "203.0.113.4",
+      now: new Date("2026-06-12T00:00:00.000Z"),
+      intents,
+      auth: {
+        signInWithOtp: vi.fn(async () => ({
+          data: {},
+          error: { status: 503 }
+        }))
+      }
+    };
+
+    await expect(
+      sendMagicLink(
+        { email: "user@example.com", stayLoggedIn: false },
+        dependencies
+      )
+    ).resolves.toMatchObject({
+      status: "error",
+      code: "AUTH_UNAVAILABLE"
+    });
+    expect(intents.invalidated).toHaveLength(1);
+  });
+
+  it("uses APP_ORIGIN and ignores poisoned forwarding headers", () => {
+    const headers = new Map([
+      ["host", "attacker.example"],
+      ["x-forwarded-host", "attacker.example"],
+      ["x-forwarded-proto", "http"],
+      ["x-forwarded-for", "203.0.113.4, 10.0.0.1"]
+    ]);
+
+    expect(
+      getLoginRequestContext(
+        { get: (name) => headers.get(name) ?? null },
+        {
+          NEXT_PUBLIC_SUPABASE_URL:
+            "https://axmooodckwmazabgitkv.supabase.co",
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
+          APP_ORIGIN: "https://prices.example",
+          LEGACY_OWNER_EMAIL: "owner@example.com"
+        }
+      )
+    ).toEqual({
+      appOrigin: "https://prices.example",
+      requesterKey: "203.0.113.4"
+    });
+  });
 });
 
 describe("auth callback", () => {
@@ -130,22 +192,28 @@ describe("auth callback", () => {
     duration: LoginIntentDuration
   ): AuthCallbackDependencies & {
     auth: AuthCallbackDependencies["auth"] & {
-      exchangeCodeForSession: ReturnType<typeof vi.fn>;
+      verifyOtp: ReturnType<typeof vi.fn>;
     };
     db: AuthCallbackDependencies["db"] & {
       createSession: ReturnType<typeof vi.fn>;
     };
   } {
     return {
+      appOrigin: "https://prices.example",
       now: new Date("2026-06-12T00:00:00.000Z"),
       intents: {
-        async create() {},
+        async reserve() {
+          return { created: true };
+        },
         async consume() {
           return { duration };
+        },
+        async invalidate() {
+          return undefined;
         }
       },
       auth: {
-        exchangeCodeForSession: vi.fn(async () => ({
+        verifyOtp: vi.fn(async () => ({
           data: {},
           error: null
         })),
@@ -185,14 +253,15 @@ describe("auth callback", () => {
       const dependencies = createDependencies(duration);
       const response = await handleAuthCallback(
         new Request(
-          "https://prices.example/auth/callback?code=pkce-code&intent=opaque-nonce"
+          "https://prices.example/auth/callback?token_hash=hashed-token&type=email&intent=opaque-nonce"
         ),
         dependencies
       );
 
-      expect(dependencies.auth.exchangeCodeForSession).toHaveBeenCalledWith(
-        "pkce-code"
-      );
+      expect(dependencies.auth.verifyOtp).toHaveBeenCalledWith({
+        token_hash: "hashed-token",
+        type: "email"
+      });
       expect(dependencies.db.createSession).toHaveBeenCalledWith({
         profileId: "profile-1",
         supabaseSessionId: SESSION_ID,
@@ -210,7 +279,7 @@ describe("auth callback", () => {
       dependencies
     );
 
-    expect(dependencies.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(dependencies.auth.verifyOtp).not.toHaveBeenCalled();
     expect(response.headers.get("location")).toBe(
       "https://prices.example/login?error=invalid_link"
     );
@@ -230,7 +299,7 @@ describe("auth callback", () => {
 
     const response = await handleAuthCallback(
       new Request(
-        "https://prices.example/auth/callback?code=pkce-code&intent=opaque-nonce"
+        "https://prices.example/auth/callback?token_hash=hashed-token&type=email&intent=opaque-nonce"
       ),
       dependencies
     );
@@ -247,7 +316,7 @@ describe("auth callback", () => {
 
     const response = await handleAuthCallback(
       new Request(
-        "https://prices.example/auth/callback?code=pkce-code&intent=expired-nonce"
+        "https://prices.example/auth/callback?token_hash=hashed-token&type=email&intent=expired-nonce"
       ),
       dependencies
     );
@@ -260,6 +329,21 @@ describe("auth callback", () => {
       "https://prices.example/login?error=invalid_link"
     );
   });
+
+  it("rejects callback OTP types other than email", async () => {
+    const dependencies = createDependencies("ONE_DAY");
+    const response = await handleAuthCallback(
+      new Request(
+        "https://prices.example/auth/callback?token_hash=hashed-token&type=invite&intent=opaque-nonce"
+      ),
+      dependencies
+    );
+
+    expect(dependencies.auth.verifyOtp).not.toHaveBeenCalled();
+    expect(response.headers.get("location")).toBe(
+      "https://prices.example/login?error=invalid_link"
+    );
+  });
 });
 
 describe("sign out", () => {
@@ -267,6 +351,7 @@ describe("sign out", () => {
     const deleteSession = vi.fn(async () => undefined);
     const signOut = vi.fn(async () => ({ error: null }));
     const dependencies: SignOutDependencies = {
+      appOrigin: "https://prices.example",
       auth: {
         getClaims: vi.fn(async () => ({
           data: {
@@ -282,7 +367,10 @@ describe("sign out", () => {
     };
 
     const response = await handleSignOut(
-      new Request("https://prices.example/auth/signout", { method: "POST" }),
+      new Request("https://attacker.example/auth/signout", {
+        method: "POST",
+        headers: { Origin: "https://prices.example" }
+      }),
       dependencies
     );
 
@@ -382,6 +470,26 @@ describe("middleware", () => {
 
     const response = await middleware(
       new NextRequest("https://prices.example/products")
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("does not redirect signed-out API mutations", async () => {
+    createServerClientMock.mockReturnValue({
+      auth: {
+        getUser: vi.fn(async () => ({
+          data: { user: null },
+          error: null
+        }))
+      }
+    });
+
+    const response = await middleware(
+      new NextRequest("https://prices.example/api/prices/refresh", {
+        method: "POST"
+      })
     );
 
     expect(response.status).toBe(200);

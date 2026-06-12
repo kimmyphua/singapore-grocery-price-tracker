@@ -20,6 +20,10 @@ describe("multi-user schema", () => {
     expect(schema).toContain("model UserProfile");
     expect(schema).toContain("model AppSession");
     expect(schema).toContain("model LoginIntent");
+    expect(schema).toMatch(/emailHash\s+String/);
+    expect(schema).toMatch(/requesterHash\s+String/);
+    expect(schema).toContain("@@index([emailHash, createdAt])");
+    expect(schema).toContain("@@index([requesterHash, createdAt])");
     expect(schema).toContain("model TrackedProduct");
     expect(schema).toContain("model TrackedProductListing");
     expect(schema).toContain("model ScrapeAttempt");
@@ -67,6 +71,14 @@ describe("multi-user schema", () => {
 
     expect(migration).toContain(
       'CREATE UNIQUE INDEX "TrackedProduct_ownerId_slug_key"',
+    );
+    expect(migration).toContain('"emailHash" TEXT NOT NULL');
+    expect(migration).toContain('"requesterHash" TEXT NOT NULL');
+    expect(migration).toContain(
+      'CREATE INDEX "LoginIntent_emailHash_createdAt_idx"',
+    );
+    expect(migration).toContain(
+      'CREATE INDEX "LoginIntent_requesterHash_createdAt_idx"',
     );
     expect(migration).toContain(
       'CREATE UNIQUE INDEX "TrackedProductListing_trackedProductId_retailerId_key"',

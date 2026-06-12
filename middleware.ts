@@ -2,7 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { parsePublicSupabaseEnv } from "@/lib/env";
 
-const PUBLIC_AUTH_PATHS = new Set(["/login", "/auth/callback"]);
+const PUBLIC_AUTH_PATHS = new Set([
+  "/login",
+  "/auth/callback",
+  "/auth/session-expired"
+]);
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -39,6 +43,7 @@ export async function middleware(request: NextRequest) {
 
   if (
     !PUBLIC_AUTH_PATHS.has(request.nextUrl.pathname) &&
+    !request.nextUrl.pathname.startsWith("/api/") &&
     !userResult.error &&
     !userResult.data.user
   ) {

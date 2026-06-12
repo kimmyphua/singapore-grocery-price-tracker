@@ -83,14 +83,18 @@ model UserProfile {
 }
 
 model LoginIntent {
-  id         String             @id @default(cuid())
-  nonceHash  String             @unique
-  duration   AppSessionDuration
-  expiresAt  DateTime
-  consumedAt DateTime?
-  createdAt  DateTime           @default(now())
+  id            String             @id @default(cuid())
+  nonceHash     String             @unique
+  emailHash     String
+  requesterHash String
+  duration      AppSessionDuration
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime           @default(now())
 
   @@index([expiresAt])
+  @@index([emailHash, createdAt])
+  @@index([requesterHash, createdAt])
 }
 
 model AppSession {

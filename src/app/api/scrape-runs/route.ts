@@ -1,6 +1,7 @@
 import { createScrapeRunPayload } from "@/lib/api/payloads";
 import { appSessionErrorResponse } from "@/lib/auth/guards";
 import { requireAppSession } from "@/lib/auth/session";
+import { requireSameOrigin } from "@/lib/auth/request-security";
 import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 
@@ -28,6 +29,11 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const originError = requireSameOrigin(request);
+  if (originError) {
+    return originError;
+  }
+
   try {
     await requireAppSession();
   } catch (error) {

@@ -1,18 +1,7 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-
-export type LoginActionState =
-  | { status: "idle" }
-  | { status: "sent"; message: string }
-  | {
-      status: "error";
-      code:
-        | "INVALID_INPUT"
-        | "RATE_LIMITED"
-        | "AUTH_UNAVAILABLE";
-      message: string;
-    };
+import type { LoginActionState } from "@/lib/auth/login";
 
 type LoginFormProps = {
   action: (

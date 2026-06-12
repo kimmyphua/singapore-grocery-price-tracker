@@ -22,6 +22,8 @@ CREATE TABLE "UserProfile" (
 CREATE TABLE "LoginIntent" (
     "id" TEXT NOT NULL,
     "nonceHash" TEXT NOT NULL,
+    "emailHash" TEXT NOT NULL,
+    "requesterHash" TEXT NOT NULL,
     "duration" "AppSessionDuration" NOT NULL,
     "expiresAt" TIMESTAMP(3) NOT NULL,
     "consumedAt" TIMESTAMP(3),
@@ -99,6 +101,12 @@ CREATE UNIQUE INDEX "LoginIntent_nonceHash_key" ON "LoginIntent"("nonceHash");
 
 -- CreateIndex
 CREATE INDEX "LoginIntent_expiresAt_idx" ON "LoginIntent"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "LoginIntent_emailHash_createdAt_idx" ON "LoginIntent"("emailHash", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "LoginIntent_requesterHash_createdAt_idx" ON "LoginIntent"("requesterHash", "createdAt");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "AppSession_supabaseSessionId_key" ON "AppSession"("supabaseSessionId");

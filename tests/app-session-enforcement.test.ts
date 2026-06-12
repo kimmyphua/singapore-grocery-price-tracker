@@ -100,9 +100,11 @@ describe("AppSession enforcement behavior", () => {
     );
 
     await expect(DashboardPage()).rejects.toThrow(
-      "NEXT_REDIRECT:/login"
+      "NEXT_REDIRECT:/auth/session-expired"
     );
-    expect(redirectMock).toHaveBeenCalledWith("/login");
+    expect(redirectMock).toHaveBeenCalledWith(
+      "/auth/session-expired"
+    );
   });
 
   it("returns 401 JSON for an expired AppSession on /api/products", async () => {

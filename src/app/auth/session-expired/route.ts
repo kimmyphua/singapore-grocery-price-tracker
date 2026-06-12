@@ -1,8 +1,7 @@
 import {
-  handleAuthCallback,
-  prismaCallbackDb
-} from "@/lib/auth/callback";
-import { prismaLoginIntentStore } from "@/lib/auth/login-intents";
+  handleSignOut,
+  prismaSignOutDb
+} from "@/lib/auth/signout";
 import { parseAuthServerEnv } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -12,10 +11,9 @@ export async function GET(request: Request) {
   const supabase = await createSupabaseServerClient();
   const env = parseAuthServerEnv(process.env);
 
-  return handleAuthCallback(request, {
+  return handleSignOut(request, {
+    appOrigin: env.appOrigin,
     auth: supabase.auth,
-    intents: prismaLoginIntentStore,
-    db: prismaCallbackDb,
-    appOrigin: env.appOrigin
+    db: prismaSignOutDb
   });
 }

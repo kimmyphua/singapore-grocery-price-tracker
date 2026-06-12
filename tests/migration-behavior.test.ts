@@ -67,6 +67,8 @@ runIntegration("multi-user migration behavior", () => {
     expect(policyCount).toBe(0);
 
     const expectedIndexes = [
+      "LoginIntent_emailHash_createdAt_idx",
+      "LoginIntent_requesterHash_createdAt_idx",
       "RetailerListing_id_retailerId_key",
       "TrackedProductListing_retailerId_idx",
     ];
@@ -92,6 +94,12 @@ runIntegration("multi-user migration behavior", () => {
     expect(
       indexDefinitions.get("TrackedProductListing_retailerId_idx"),
     ).toContain('("retailerId")');
+    expect(
+      indexDefinitions.get("LoginIntent_emailHash_createdAt_idx"),
+    ).toContain('("emailHash", "createdAt")');
+    expect(
+      indexDefinitions.get("LoginIntent_requesterHash_createdAt_idx"),
+    ).toContain('("requesterHash", "createdAt")');
 
     const suffix = randomUUID();
     const profileId = `profile-${suffix}`;

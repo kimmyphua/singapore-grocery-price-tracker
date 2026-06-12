@@ -17,6 +17,13 @@ export async function requireProtectedPage() {
   } catch (error) {
     if (
       error instanceof AuthSessionError &&
+      error.code === "SESSION_EXPIRED"
+    ) {
+      redirect("/auth/session-expired");
+    }
+
+    if (
+      error instanceof AuthSessionError &&
       LOGIN_STATE_ERROR_CODES.has(error.code)
     ) {
       redirect("/login");
