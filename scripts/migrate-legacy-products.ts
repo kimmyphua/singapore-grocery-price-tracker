@@ -1,0 +1,223 @@
+import { pathToFileURL } from "node:url";
+import { prisma } from "@/lib/db";
+
+type LegacyProduct = {
+  id: string;
+  slug: string;
+  brand: string;
+  family: string;
+  flavour: string | null;
+  packCount: number;
+  unitSize: number;
+  unit: string;
+  totalSize: number;
+  listings: Array<{
+    id: string;
+    titleRaw?: string;
+    imageUrl: string | null;
+  }>;
+};
+
+type TrackedProductData = {
+  ownerId: string;
+  slug: string;
+  name: string;
+  brand: string;
+  family: string;
+  flavour: string | null;
+  packCount: number;
+  unitSize: number;
+  unit: string;
+  totalSize: number;
+  imageUrl: string | null;
+};
+
+export type LegacyMigrationStore = {
+  findOwnerProfiles(email: string): Promise<Array<{ id: string }>>;
+  listLegacyProducts(): Promise<LegacyProduct[]>;
+  upsertTrackedProduct(
+    data: TrackedProductData
+  ): Promise<{ id: string; ownerId: string; slug: string }>;
+  upsertTrackedProductListing(data: {
+    trackedProductId: string;
+    retailerListingId: string;
+  }): Promise<void>;
+};
+
+export async function migrateLegacyProducts(
+  store: LegacyMigrationStore,
+  ownerEmail: string
+) {
+  const normalizedEmail = ownerEmail.trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw new Error("LEGACY_OWNER_EMAIL_REQUIRED");
+  }
+
+  const owners = await store.findOwnerProfiles(normalizedEmail);
+  if (owners.length === 0) {
+    throw new Error("LEGACY_OWNER_NOT_FOUND");
+  }
+  if (owners.length !== 1) {
+    throw new Error("LEGACY_OWNER_NOT_UNIQUE");
+  }
+
+  const ownerId = owners[0].id;
+  const legacyProducts = await store.listLegacyProducts();
+  let listingsProcessed = 0;
+
+  for (const legacy of legacyProducts) {
+    const firstListing = legacy.listings[0];
+    const product = await store.upsertTrackedProduct({
+      ownerId,
+      slug: legacy.slug,
+      name: firstListing?.titleRaw?.trim() || nameFromSlug(legacy.slug),
+      brand: legacy.brand,
+      family: legacy.family,
+      flavour: legacy.flavour,
+      packCount: legacy.packCount,
+      unitSize: legacy.unitSize,
+      unit: legacy.unit,
+      totalSize: legacy.totalSize,
+      imageUrl:
+        legacy.listings.find((listing) => listing.imageUrl)?.imageUrl ?? null
+    });
+
+    for (const listing of legacy.listings) {
+      await store.upsertTrackedProductListing({
+        trackedProductId: product.id,
+        retailerListingId: listing.id
+      });
+      listingsProcessed += 1;
+    }
+  }
+
+  return {
+    ownerId,
+    productsProcessed: legacyProducts.length,
+    listingsProcessed
+  };
+}
+
+const prismaLegacyMigrationStore: LegacyMigrationStore = {
+  findOwnerProfiles(email) {
+    return prisma.userProfile.findMany({
+      where: { email: { equals: email, mode: "insensitive" } },
+      select: { id: true },
+      take: 2
+    });
+  },
+  listLegacyProducts() {
+    return prisma.canonicalProduct.findMany({
+      orderBy: { slug: "asc" },
+      select: {
+        id: true,
+        slug: true,
+        brand: true,
+        family: true,
+        flavour: true,
+        packCount: true,
+        unitSize: true,
+        unit: true,
+        totalSize: true,
+        listings: {
+          orderBy: { id: "asc" },
+          select: {
+            id: true,
+            titleRaw: true,
+            imageUrl: true
+          }
+        }
+      }
+    });
+  },
+  upsertTrackedProduct(data) {
+    return prisma.trackedProduct.upsert({
+      where: {
+        ownerId_slug: {
+          ownerId: data.ownerId,
+          slug: data.slug
+        }
+      },
+      create: data,
+      update: {
+        name: data.name,
+        brand: data.brand,
+        family: data.family,
+        flavour: data.flavour,
+        packCount: data.packCount,
+        unitSize: data.unitSize,
+        unit: data.unit,
+        totalSize: data.totalSize,
+        imageUrl: data.imageUrl,
+        isActive: true
+      },
+      select: {
+        id: true,
+        ownerId: true,
+        slug: true
+      }
+    });
+  },
+  async upsertTrackedProductListing({
+    trackedProductId,
+    retailerListingId
+  }) {
+    const listing = await prisma.retailerListing.findUniqueOrThrow({
+      where: { id: retailerListingId },
+      select: { retailerId: true }
+    });
+
+    await prisma.trackedProductListing.upsert({
+      where: {
+        trackedProductId_retailerListingId: {
+          trackedProductId,
+          retailerListingId
+        }
+      },
+      create: {
+        trackedProductId,
+        retailerListingId,
+        retailerId: listing.retailerId
+      },
+      update: {
+        retailerId: listing.retailerId
+      }
+    });
+  }
+};
+
+function nameFromSlug(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+async function main() {
+  const ownerEmail = process.env.LEGACY_OWNER_EMAIL;
+  if (!ownerEmail) {
+    throw new Error("LEGACY_OWNER_EMAIL_REQUIRED");
+  }
+
+  const result = await migrateLegacyProducts(
+    prismaLegacyMigrationStore,
+    ownerEmail
+  );
+  console.log(JSON.stringify(result));
+}
+
+const entrypoint = process.argv[1]
+  ? pathToFileURL(process.argv[1]).href
+  : undefined;
+
+if (entrypoint === import.meta.url) {
+  main()
+    .catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : "Migration failed");
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
