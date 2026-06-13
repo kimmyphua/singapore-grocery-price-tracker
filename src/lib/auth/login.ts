@@ -106,6 +106,14 @@ export async function authenticateWithPassword(
       return authUnavailableState();
     }
 
+    if (payload.data.mode === "SIGN_UP" && !result.data.session) {
+      return {
+        status: "error",
+        code: "ACCOUNT_EXISTS",
+        message: "An account already exists for this email. Sign in instead."
+      };
+    }
+
     return { status: "authenticated" };
   } catch {
     return authUnavailableState();

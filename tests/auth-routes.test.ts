@@ -164,6 +164,34 @@ describe("login request", () => {
     });
   });
 
+  it("does not authenticate a sign-up without a new session", async () => {
+    await expect(
+      authenticateWithPassword(
+        {
+          email: "user@example.com",
+          password: "a secure password",
+          mode: "SIGN_UP"
+        },
+        {
+          auth: {
+            signInWithPassword: vi.fn(),
+            signUp: vi.fn(async () => ({
+              data: {
+                user: { id: USER_ID },
+                session: null
+              },
+              error: null
+            }))
+          }
+        }
+      )
+    ).resolves.toEqual({
+      status: "error",
+      code: "ACCOUNT_EXISTS",
+      message: "An account already exists for this email. Sign in instead."
+    });
+  });
+
   it("returns a safe provider error", async () => {
     await expect(
       authenticateWithPassword(
