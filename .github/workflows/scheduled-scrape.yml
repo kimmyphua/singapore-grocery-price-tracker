@@ -2,15 +2,16 @@ name: Scheduled Scrape
 
 on:
   workflow_dispatch:
-  # Enable only after retailer selectors are verified.
-  # schedule:
-  #   - cron: "15 20 * * *"
+  schedule:
+    # Midnight and noon in Singapore (UTC+8).
+    - cron: "0 4,16 * * *"
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
       SCRAPER_USER_AGENT: ${{ secrets.SCRAPER_USER_AGENT }}
       SCRAPER_MIN_DELAY_MS: "2000"
       SCRAPER_MAX_RESULTS_PER_QUERY: "10"

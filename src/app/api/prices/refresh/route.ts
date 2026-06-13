@@ -1,8 +1,13 @@
-import { refreshLatestPrices } from "@/lib/pricing/refresh-prices";
+import { z } from "zod";
+import { refreshOwnerListings } from "@/lib/pricing/refresh-prices";
 import { appSessionErrorResponse } from "@/lib/auth/guards";
 import { requireAppSession } from "@/lib/auth/session";
 import { requireSameOrigin } from "@/lib/auth/request-security";
 import { NextResponse } from "next/server";
+
+const requestSchema = z.object({
+  trackedProductId: z.string().trim().min(1).optional()
+});
 
 export async function POST(request: Request) {
   const originError = requireSameOrigin(request);
@@ -10,8 +15,9 @@ export async function POST(request: Request) {
     return originError;
   }
 
+  let session;
   try {
-    await requireAppSession();
+    session = await requireAppSession();
   } catch (error) {
     const response = appSessionErrorResponse(error);
     if (response) {
@@ -20,10 +26,17 @@ export async function POST(request: Request) {
     throw error;
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    productSlug?: string;
-  };
+  const payload = requestSchema.safeParse(
+    await request.json().catch(() => ({}))
+  );
+  if (!payload.success) {
+    return NextResponse.json({ error: "INVALID_INPUT" }, { status: 422 });
+  }
 
-  const result = await refreshLatestPrices({ productSlug: body.productSlug });
+  const result = await refreshOwnerListings(
+    undefined,
+    session.profileId,
+    payload.data.trackedProductId
+  );
   return NextResponse.json(result, { status: 201 });
 }
