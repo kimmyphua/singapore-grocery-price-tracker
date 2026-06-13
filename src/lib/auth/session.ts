@@ -6,12 +6,10 @@ export type AuthContext = {
   profileId: string;
   supabaseUserId: string;
   email: string;
-  supabaseSessionId: string;
 };
 
 export type AuthSessionErrorCode =
   | "SESSION_MISSING"
-  | "SESSION_EXPIRED"
   | "SESSION_INVALID"
   | "SESSION_PROVIDER_ERROR";
 
@@ -47,38 +45,23 @@ type AuthAdapter = {
     data: { user: VerifiedUser | null };
     error: unknown;
   }>;
-  getClaims(): Promise<{
-    data: { claims: unknown } | null;
-    error: unknown;
-  }>;
-  signOut(options: { scope: "local" }): Promise<unknown>;
 };
 
-type AppSessionDb = {
+type ProfileDb = {
   upsertProfile(input: {
     supabaseUserId: string;
     email: string;
   }): Promise<{ id: string }>;
-  findSession(supabaseSessionId: string): Promise<{
-    profileId: string;
-    expiresAt: Date;
-  } | null>;
 };
 
 type RequireAppSessionDependencies = {
-  now?: Date;
   auth?: AuthAdapter;
-  db?: AppSessionDb;
+  db?: ProfileDb;
 };
 
 const verifiedUserSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email()
-});
-
-const verifiedClaimsSchema = z.object({
-  sub: z.string().uuid(),
-  session_id: z.string().uuid()
 });
 
 const authErrorSchema = z.object({
@@ -156,22 +139,13 @@ function throwProviderError(error: unknown): never {
   );
 }
 
-const prismaSessionDb: AppSessionDb = {
+const prismaProfileDb: ProfileDb = {
   upsertProfile({ supabaseUserId, email }) {
     return prisma.userProfile.upsert({
       where: { supabaseUserId },
       create: { supabaseUserId, email },
       update: { email },
       select: { id: true }
-    });
-  },
-  findSession(supabaseSessionId) {
-    return prisma.appSession.findUnique({
-      where: { supabaseSessionId },
-      select: {
-        profileId: true,
-        expiresAt: true
-      }
     });
   }
 };
@@ -181,8 +155,7 @@ export async function requireAppSession(
 ): Promise<AuthContext> {
   const auth =
     dependencies.auth ?? (await createSupabaseServerClient()).auth;
-  const db = dependencies.db ?? prismaSessionDb;
-  const now = dependencies.now ?? new Date();
+  const db = dependencies.db ?? prismaProfileDb;
 
   let userResult: Awaited<ReturnType<AuthAdapter["getUser"]>>;
   try {
@@ -210,57 +183,14 @@ export async function requireAppSession(
     );
   }
 
-  let claimsResult: Awaited<ReturnType<AuthAdapter["getClaims"]>>;
-  try {
-    claimsResult = await auth.getClaims();
-  } catch (error) {
-    throwProviderError(error);
-  }
-
-  if (claimsResult.error) {
-    throwAuthResultError(claimsResult.error);
-  }
-
-  if (!claimsResult.data) {
-    throw new AuthSessionError(
-      "SESSION_MISSING",
-      "An authenticated Supabase user is required."
-    );
-  }
-
-  const claims = verifiedClaimsSchema.safeParse(claimsResult.data.claims);
-  if (!claims.success || claims.data.sub !== user.data.id) {
-    throw new AuthSessionError(
-      "SESSION_INVALID",
-      "The verified Supabase session does not match the current user."
-    );
-  }
-
   const profile = await db.upsertProfile({
     supabaseUserId: user.data.id,
     email: user.data.email
   });
-  const appSession = await db.findSession(claims.data.session_id);
-
-  if (!appSession || appSession.profileId !== profile.id) {
-    throw new AuthSessionError(
-      "SESSION_INVALID",
-      "The application session is invalid."
-    );
-  }
-
-  if (appSession.expiresAt.getTime() <= now.getTime()) {
-    await auth.signOut({ scope: "local" }).catch(() => undefined);
-    throw new AuthSessionError(
-      "SESSION_EXPIRED",
-      "The application session has expired."
-    );
-  }
 
   return {
     profileId: profile.id,
     supabaseUserId: user.data.id,
-    email: user.data.email,
-    supabaseSessionId: claims.data.session_id
+    email: user.data.email
   };
 }

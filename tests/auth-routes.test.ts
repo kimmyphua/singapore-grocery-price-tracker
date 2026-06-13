@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import type {
-  LoginIntentDuration,
-  LoginIntentStore
-} from "@/lib/auth/login-intents";
 
 const { createServerClientMock } = vi.hoisted(() => ({
   createServerClientMock: vi.fn()
@@ -18,14 +14,9 @@ vi.mock("@supabase/ssr", async (importOriginal) => {
 });
 
 import {
-  getLoginRequestContext,
-  sendMagicLink,
+  authenticateWithPassword,
   type LoginRequestDependencies
 } from "@/lib/auth/login";
-import {
-  handleAuthCallback,
-  type AuthCallbackDependencies
-} from "@/lib/auth/callback";
 import {
   handleSignOut,
   type SignOutDependencies
@@ -33,359 +24,179 @@ import {
 import { middleware } from "../middleware";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
-const SESSION_ID = "22222222-2222-4222-8222-222222222222";
-
-function createIntentStore(): LoginIntentStore & {
-  createdDurations: LoginIntentDuration[];
-  invalidated: string[];
-} {
-  const createdDurations: LoginIntentDuration[] = [];
-  const invalidated: string[] = [];
-
-  return {
-    createdDurations,
-    invalidated,
-    async reserve(input) {
-      createdDurations.push(input.duration);
-      return { created: true };
-    },
-    async consume() {
-      return { duration: createdDurations.at(-1) ?? "ONE_DAY" };
-    },
-    async invalidate(nonceHash) {
-      invalidated.push(nonceHash);
-    }
-  };
-}
 
 describe("login request", () => {
-  it("creates a 30-day intent and sends the magic link to the callback", async () => {
-    const intents = createIntentStore();
-    const signInWithOtp = vi.fn(async () => ({
-      data: {},
+  it("signs in with a normalized email and password", async () => {
+    const signInWithPassword = vi.fn(async () => ({
+      data: { user: { id: USER_ID } },
       error: null
     }));
     const dependencies: LoginRequestDependencies = {
-      appOrigin: "https://prices.example",
-      requesterKey: "203.0.113.4",
-      now: new Date("2026-06-12T00:00:00.000Z"),
-      intents,
-      auth: { signInWithOtp }
+      auth: {
+        signInWithPassword,
+        signUp: vi.fn()
+      }
     };
 
     await expect(
-      sendMagicLink(
+      authenticateWithPassword(
         {
           email: "  User@Example.com ",
-          stayLoggedIn: true
+          password: "correct horse battery staple",
+          mode: "SIGN_IN"
         },
         dependencies
       )
     ).resolves.toEqual({
-      status: "sent",
-      message: "Check your email for a sign-in link."
+      status: "authenticated"
     });
 
-    expect(intents.createdDurations).toEqual(["THIRTY_DAYS"]);
-    expect(signInWithOtp).toHaveBeenCalledWith({
+    expect(signInWithPassword).toHaveBeenCalledWith({
       email: "User@example.com",
-      options: {
-        emailRedirectTo: expect.stringMatching(
-          /^https:\/\/prices\.example\/auth\/callback\?intent=[A-Za-z0-9_-]+$/
-        )
-      }
+      password: "correct horse battery staple"
     });
   });
 
-  it("returns safe validation and rate-limit errors", async () => {
-    const signInWithOtp = vi.fn(async () => ({
-      data: {},
+  it("creates an account with email and password", async () => {
+    const signUp = vi.fn(async () => ({
+      data: {
+        user: { id: USER_ID },
+        session: { access_token: "access-token" }
+      },
+      error: null
+    }));
+
+    await expect(
+      authenticateWithPassword(
+        {
+          email: "new@example.com",
+          password: "a secure password",
+          mode: "SIGN_UP"
+        },
+        {
+          auth: {
+            signInWithPassword: vi.fn(),
+            signUp
+          }
+        }
+      )
+    ).resolves.toEqual({
+      status: "authenticated"
+    });
+    expect(signUp).toHaveBeenCalledWith({
+      email: "new@example.com",
+      password: "a secure password"
+    });
+  });
+
+  it("returns safe validation and credential errors", async () => {
+    const signInWithPassword = vi.fn(async () => ({
+      data: { user: null },
       error: {
-        status: 429,
-        message: "provider details must not be returned"
+        status: 400,
+        code: "invalid_credentials",
+        message: "sensitive provider detail"
       }
     }));
     const dependencies: LoginRequestDependencies = {
-      appOrigin: "https://prices.example",
-      requesterKey: "203.0.113.4",
-      intents: createIntentStore(),
-      auth: { signInWithOtp }
+      auth: {
+        signInWithPassword,
+        signUp: vi.fn()
+      }
     };
 
     await expect(
-      sendMagicLink(
-        { email: "not-an-email", stayLoggedIn: false },
+      authenticateWithPassword(
+        {
+          email: "not-an-email",
+          password: "short",
+          mode: "SIGN_IN"
+        },
         dependencies
       )
     ).resolves.toEqual({
       status: "error",
       code: "INVALID_INPUT",
-      message: "Enter a valid email address."
+      message: "Enter a valid email and a password of at least 8 characters."
     });
     await expect(
-      sendMagicLink(
-        { email: "user@example.com", stayLoggedIn: false },
+      authenticateWithPassword(
+        {
+          email: "user@example.com",
+          password: "wrong password",
+          mode: "SIGN_IN"
+        },
         dependencies
       )
     ).resolves.toEqual({
       status: "error",
-      code: "RATE_LIMITED",
-      message: "Too many sign-in attempts. Try again later."
+      code: "INVALID_CREDENTIALS",
+      message: "Email or password is incorrect."
     });
   });
 
-  it("invalidates the reserved intent when Supabase does not send", async () => {
-    const intents = createIntentStore();
-    const dependencies: LoginRequestDependencies = {
-      appOrigin: "https://prices.example",
-      requesterKey: "203.0.113.4",
-      now: new Date("2026-06-12T00:00:00.000Z"),
-      intents,
-      auth: {
-        signInWithOtp: vi.fn(async () => ({
-          data: {},
-          error: { status: 503 }
-        }))
-      }
-    };
-
+  it("reports an existing account safely during sign-up", async () => {
     await expect(
-      sendMagicLink(
-        { email: "user@example.com", stayLoggedIn: false },
-        dependencies
-      )
-    ).resolves.toMatchObject({
-      status: "error",
-      code: "AUTH_UNAVAILABLE"
-    });
-    expect(intents.invalidated).toHaveLength(1);
-  });
-
-  it("uses APP_ORIGIN and ignores poisoned forwarding headers", () => {
-    const headers = new Map([
-      ["host", "attacker.example"],
-      ["x-forwarded-host", "attacker.example"],
-      ["x-forwarded-proto", "http"],
-      ["x-forwarded-for", "203.0.113.4, 10.0.0.1"]
-    ]);
-
-    expect(
-      getLoginRequestContext(
-        { get: (name) => headers.get(name) ?? null },
+      authenticateWithPassword(
         {
-          NEXT_PUBLIC_SUPABASE_URL:
-            "https://axmooodckwmazabgitkv.supabase.co",
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
-          APP_ORIGIN: "https://prices.example"
+          email: "user@example.com",
+          password: "a secure password",
+          mode: "SIGN_UP"
+        },
+        {
+          auth: {
+            signInWithPassword: vi.fn(),
+            signUp: vi.fn(async () => ({
+              data: { user: null, session: null },
+              error: {
+                status: 422,
+                code: "user_already_exists",
+                message: "provider detail"
+              }
+            }))
+          }
         }
       )
-    ).toEqual({
-      appOrigin: "https://prices.example",
-      requesterKey: "203.0.113.4"
+    ).resolves.toEqual({
+      status: "error",
+      code: "ACCOUNT_EXISTS",
+      message: "An account already exists for this email. Sign in instead."
     });
   });
-});
 
-describe("auth callback", () => {
-  function createDependencies(
-    duration: LoginIntentDuration
-  ): AuthCallbackDependencies & {
-    auth: AuthCallbackDependencies["auth"] & {
-      exchangeCodeForSession: ReturnType<typeof vi.fn>;
-      verifyOtp: ReturnType<typeof vi.fn>;
-    };
-    db: AuthCallbackDependencies["db"] & {
-      createSession: ReturnType<typeof vi.fn>;
-    };
-  } {
-    return {
-      appOrigin: "https://prices.example",
-      now: new Date("2026-06-12T00:00:00.000Z"),
-      intents: {
-        async reserve() {
-          return { created: true };
+  it("returns a safe provider error", async () => {
+    await expect(
+      authenticateWithPassword(
+        {
+          email: "user@example.com",
+          password: "a secure password",
+          mode: "SIGN_IN"
         },
-        async consume() {
-          return { duration };
-        },
-        async invalidate() {
-          return undefined;
+        {
+          auth: {
+            signInWithPassword: vi.fn(async () => {
+              throw new Error("secret upstream detail");
+            }),
+            signUp: vi.fn()
+          }
         }
-      },
-      auth: {
-        exchangeCodeForSession: vi.fn(async () => ({
-          data: {},
-          error: null
-        })),
-        verifyOtp: vi.fn(async () => ({
-          data: {},
-          error: null
-        })),
-        getUser: vi.fn(async () => ({
-          data: {
-            user: {
-              id: USER_ID,
-              email: "user@example.com"
-            }
-          },
-          error: null
-        })),
-        getClaims: vi.fn(async () => ({
-          data: {
-            claims: {
-              sub: USER_ID,
-              session_id: SESSION_ID
-            }
-          },
-          error: null
-        })),
-        signOut: vi.fn(async () => ({ error: null }))
-      },
-      db: {
-        upsertProfile: vi.fn(async () => ({ id: "profile-1" })),
-        createSession: vi.fn(async () => undefined)
-      }
-    };
-  }
-
-  it.each([
-    ["ONE_DAY", "2026-06-13T00:00:00.000Z"],
-    ["THIRTY_DAYS", "2026-07-12T00:00:00.000Z"]
-  ] as const)(
-    "exchanges the code and creates an exact %s application session",
-    async (duration, expectedExpiry) => {
-      const dependencies = createDependencies(duration);
-      const response = await handleAuthCallback(
-        new Request(
-          "https://prices.example/auth/callback?token_hash=hashed-token&type=email&intent=opaque-nonce"
-        ),
-        dependencies
-      );
-
-      expect(dependencies.auth.verifyOtp).toHaveBeenCalledWith({
-        token_hash: "hashed-token",
-        type: "email"
-      });
-      expect(dependencies.db.createSession).toHaveBeenCalledWith({
-        profileId: "profile-1",
-        supabaseSessionId: SESSION_ID,
-        expiresAt: new Date(expectedExpiry)
-      });
-      expect(response.status).toBe(307);
-      expect(response.headers.get("location")).toBe("https://prices.example/");
-    }
-  );
-
-  it("accepts Supabase's default PKCE magic-link callback", async () => {
-    const dependencies = createDependencies("ONE_DAY");
-    const response = await handleAuthCallback(
-      new Request(
-        "https://prices.example/auth/callback?code=pkce-code&intent=opaque-nonce"
-      ),
-      dependencies
-    );
-
-    expect(dependencies.auth.exchangeCodeForSession).toHaveBeenCalledWith(
-      "pkce-code"
-    );
-    expect(dependencies.auth.verifyOtp).not.toHaveBeenCalled();
-    expect(dependencies.db.createSession).toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe("https://prices.example/");
-  });
-
-  it("rejects malformed callback payloads without calling Supabase", async () => {
-    const dependencies = createDependencies("ONE_DAY");
-    const response = await handleAuthCallback(
-      new Request("https://prices.example/auth/callback?code=pkce-code"),
-      dependencies
-    );
-
-    expect(dependencies.auth.exchangeCodeForSession).not.toHaveBeenCalled();
-    expect(dependencies.auth.verifyOtp).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe(
-      "https://prices.example/login?error=invalid_link"
-    );
-  });
-
-  it("rejects claims that do not match the verified user", async () => {
-    const dependencies = createDependencies("ONE_DAY");
-    dependencies.auth.getClaims = vi.fn(async () => ({
-      data: {
-        claims: {
-          sub: "33333333-3333-4333-8333-333333333333",
-          session_id: SESSION_ID
-        }
-      },
-      error: null
-    }));
-
-    const response = await handleAuthCallback(
-      new Request(
-        "https://prices.example/auth/callback?token_hash=hashed-token&type=email&intent=opaque-nonce"
-      ),
-      dependencies
-    );
-
-    expect(dependencies.db.createSession).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe(
-      "https://prices.example/login?error=invalid_link"
-    );
-  });
-
-  it("signs out locally when an exchanged callback has an invalid intent", async () => {
-    const dependencies = createDependencies("ONE_DAY");
-    dependencies.intents.consume = vi.fn(async () => null);
-
-    const response = await handleAuthCallback(
-      new Request(
-        "https://prices.example/auth/callback?token_hash=hashed-token&type=email&intent=expired-nonce"
-      ),
-      dependencies
-    );
-
-    expect(dependencies.auth.signOut).toHaveBeenCalledWith({
-      scope: "local"
+      )
+    ).resolves.toEqual({
+      status: "error",
+      code: "AUTH_UNAVAILABLE",
+      message: "Sign-in is temporarily unavailable. Try again later."
     });
-    expect(dependencies.db.createSession).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe(
-      "https://prices.example/login?error=invalid_link"
-    );
-  });
-
-  it("rejects callback OTP types other than email", async () => {
-    const dependencies = createDependencies("ONE_DAY");
-    const response = await handleAuthCallback(
-      new Request(
-        "https://prices.example/auth/callback?token_hash=hashed-token&type=invite&intent=opaque-nonce"
-      ),
-      dependencies
-    );
-
-    expect(dependencies.auth.verifyOtp).not.toHaveBeenCalled();
-    expect(response.headers.get("location")).toBe(
-      "https://prices.example/login?error=invalid_link"
-    );
   });
 });
 
 describe("sign out", () => {
-  it("deletes only the current app session and signs out locally", async () => {
-    const deleteSession = vi.fn(async () => undefined);
+  it("signs out locally without custom session cleanup", async () => {
     const signOut = vi.fn(async () => ({ error: null }));
     const dependencies: SignOutDependencies = {
       appOrigin: "https://prices.example",
       auth: {
-        getClaims: vi.fn(async () => ({
-          data: {
-            claims: {
-              session_id: SESSION_ID
-            }
-          },
-          error: null
-        })),
         signOut
-      },
-      db: { deleteSession }
+      }
     };
 
     const response = await handleSignOut(
@@ -396,7 +207,6 @@ describe("sign out", () => {
       dependencies
     );
 
-    expect(deleteSession).toHaveBeenCalledWith(SESSION_ID);
     expect(signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(
@@ -450,7 +260,7 @@ describe("middleware", () => {
     expect(response.cookies.get("sb-token")?.value).toBe("refreshed");
   });
 
-  it("redirects signed-out protected requests but permits login and callback", async () => {
+  it("redirects signed-out protected requests but permits login", async () => {
     createServerClientMock.mockReturnValue({
       auth: {
         getUser: vi.fn(async () => ({
@@ -466,15 +276,11 @@ describe("middleware", () => {
     const loginResponse = await middleware(
       new NextRequest("https://prices.example/login")
     );
-    const callbackResponse = await middleware(
-      new NextRequest("https://prices.example/auth/callback?code=code")
-    );
 
     expect(protectedResponse.headers.get("location")).toBe(
       "https://prices.example/login"
     );
     expect(loginResponse.headers.get("location")).toBeNull();
-    expect(callbackResponse.headers.get("location")).toBeNull();
   });
 
   it("does not turn middleware provider failures into login redirects", async () => {

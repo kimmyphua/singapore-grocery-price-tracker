@@ -1,7 +1,4 @@
-import {
-  handleSignOut,
-  prismaSignOutDb
-} from "@/lib/auth/signout";
+import { handleSignOut } from "@/lib/auth/signout";
 import { requireSameOrigin } from "@/lib/auth/request-security";
 import { parseAuthServerEnv } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -19,7 +16,6 @@ export async function POST(request: Request) {
 
   return handleSignOut(request, {
     appOrigin: env.appOrigin,
-    auth: supabase.auth,
-    db: prismaSignOutDb
+    auth: supabase.auth
   });
 }

@@ -1,41 +1,39 @@
 import { z } from "zod";
-import {
-  createLoginIntent,
-  invalidateLoginIntent,
-  LoginRateLimitError,
-  type LoginIntentStore
-} from "@/lib/auth/login-intents";
-import { parseAuthServerEnv } from "@/lib/env";
 
 export type LoginActionState =
   | { status: "idle" }
-  | { status: "sent"; message: string }
+  | { status: "authenticated" }
   | {
       status: "error";
       code:
         | "INVALID_INPUT"
-        | "RATE_LIMITED"
+        | "INVALID_CREDENTIALS"
+        | "ACCOUNT_EXISTS"
         | "AUTH_UNAVAILABLE";
       message: string;
     };
 
+type PasswordAuthResult = {
+  data: {
+    user: unknown;
+    session?: unknown;
+  };
+  error: unknown;
+};
+
 type LoginAuthAdapter = {
-  signInWithOtp(input: {
+  signInWithPassword(input: {
     email: string;
-    options: { emailRedirectTo: string };
-  }): Promise<{ data: unknown; error: unknown }>;
+    password: string;
+  }): Promise<PasswordAuthResult>;
+  signUp(input: {
+    email: string;
+    password: string;
+  }): Promise<PasswordAuthResult>;
 };
 
 export type LoginRequestDependencies = {
-  appOrigin: string;
-  requesterKey: string;
-  intents: LoginIntentStore;
   auth: LoginAuthAdapter;
-  now?: Date;
-};
-
-type HeaderReader = {
-  get(name: string): string | null;
 };
 
 const loginRequestSchema = z.object({
@@ -47,14 +45,15 @@ const loginRequestSchema = z.object({
       const at = email.lastIndexOf("@");
       return `${email.slice(0, at)}@${email.slice(at + 1).toLowerCase()}`;
     }),
-  stayLoggedIn: z.boolean()
+  password: z.string().min(8).max(72),
+  mode: z.enum(["SIGN_IN", "SIGN_UP"])
 });
 
 const providerErrorSchema = z.object({
-  status: z.number().optional()
+  code: z.string().optional()
 });
 
-export async function sendMagicLink(
+export async function authenticateWithPassword(
   input: unknown,
   dependencies: LoginRequestDependencies
 ): Promise<LoginActionState> {
@@ -64,87 +63,53 @@ export async function sendMagicLink(
     return {
       status: "error",
       code: "INVALID_INPUT",
-      message: "Enter a valid email address."
+      message: "Enter a valid email and a password of at least 8 characters."
     };
   }
 
-  let nonce: string | undefined;
-
   try {
-    const duration = payload.data.stayLoggedIn
-      ? "THIRTY_DAYS"
-      : "ONE_DAY";
-    const created = await createLoginIntent(
-      dependencies.intents,
-      duration,
-      {
-        email: payload.data.email,
-        requesterKey: dependencies.requesterKey
-      },
-      dependencies.now
-    );
-    nonce = created.nonce;
-    const callbackUrl = new URL(
-      "/auth/callback",
-      dependencies.appOrigin
-    );
-    callbackUrl.searchParams.set("intent", nonce);
-    const result = await dependencies.auth.signInWithOtp({
+    const credentials = {
       email: payload.data.email,
-      options: {
-        emailRedirectTo: callbackUrl.toString()
-      }
-    });
+      password: payload.data.password
+    };
+    const result =
+      payload.data.mode === "SIGN_UP"
+        ? await dependencies.auth.signUp(credentials)
+        : await dependencies.auth.signInWithPassword(credentials);
 
     if (result.error) {
-      await invalidateLoginIntent(
-        dependencies.intents,
-        nonce,
-        dependencies.now
-      ).catch(() => undefined);
       const providerError = providerErrorSchema.safeParse(result.error);
+      const code = providerError.success
+        ? providerError.data.code
+        : undefined;
 
-      if (providerError.success && providerError.data.status === 429) {
-        return rateLimitedState();
+      if (code === "invalid_credentials") {
+        return {
+          status: "error",
+          code: "INVALID_CREDENTIALS",
+          message: "Email or password is incorrect."
+        };
+      }
+
+      if (code === "user_already_exists") {
+        return {
+          status: "error",
+          code: "ACCOUNT_EXISTS",
+          message: "An account already exists for this email. Sign in instead."
+        };
       }
 
       return authUnavailableState();
     }
 
-    return {
-      status: "sent",
-      message: "Check your email for a sign-in link."
-    };
-  } catch (error) {
-    if (nonce) {
-      await invalidateLoginIntent(
-        dependencies.intents,
-        nonce,
-        dependencies.now
-      ).catch(() => undefined);
+    if (!result.data.user) {
+      return authUnavailableState();
     }
-    if (error instanceof LoginRateLimitError) {
-      return rateLimitedState();
-    }
+
+    return { status: "authenticated" };
+  } catch {
     return authUnavailableState();
   }
-}
-
-export function getLoginRequestContext(
-  headerStore: HeaderReader,
-  env: Record<string, string | undefined>
-) {
-  const config = parseAuthServerEnv(env);
-  const forwardedFor = headerStore.get("x-forwarded-for");
-  const requesterKey =
-    forwardedFor?.split(",")[0]?.trim() ||
-    headerStore.get("x-real-ip")?.trim() ||
-    "unknown";
-
-  return {
-    appOrigin: config.appOrigin,
-    requesterKey
-  };
 }
 
 export function authUnavailableState(): LoginActionState {
@@ -152,13 +117,5 @@ export function authUnavailableState(): LoginActionState {
     status: "error",
     code: "AUTH_UNAVAILABLE",
     message: "Sign-in is temporarily unavailable. Try again later."
-  };
-}
-
-function rateLimitedState(): LoginActionState {
-  return {
-    status: "error",
-    code: "RATE_LIMITED",
-    message: "Too many sign-in attempts. Try again later."
   };
 }

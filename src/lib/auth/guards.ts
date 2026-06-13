@@ -7,7 +7,6 @@ import {
 
 const LOGIN_STATE_ERROR_CODES = new Set([
   "SESSION_MISSING",
-  "SESSION_EXPIRED",
   "SESSION_INVALID"
 ]);
 
@@ -15,13 +14,6 @@ export async function requireProtectedPage() {
   try {
     return await requireAppSession();
   } catch (error) {
-    if (
-      error instanceof AuthSessionError &&
-      error.code === "SESSION_EXPIRED"
-    ) {
-      redirect("/auth/session-expired");
-    }
-
     if (
       error instanceof AuthSessionError &&
       LOGIN_STATE_ERROR_CODES.has(error.code)

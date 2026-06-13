@@ -31,30 +31,23 @@ export function LoginForm({
         />
       </label>
 
-      <label className="flex items-start gap-3 text-sm text-slate-700">
+      <label className="block">
+        <span className="text-sm font-semibold text-ink">Password</span>
         <input
-          type="checkbox"
-          name="stayLoggedIn"
-          className="mt-0.5 h-4 w-4 rounded border-teal/30 text-teal"
+          type="password"
+          name="password"
+          autoComplete="current-password"
+          minLength={8}
+          required
+          className="mt-2 h-11 w-full rounded-md border border-teal/25 bg-white px-3 text-sm text-ink outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/15"
         />
-        <span>
-          <span className="font-semibold text-ink">Stay logged in</span>
-          <span className="mt-1 block text-xs leading-5 text-slate-500">
-            Keep this browser signed in for 30 days instead of 24 hours.
-          </span>
-        </span>
       </label>
 
-      <SubmitButton />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <SubmitButton mode="SIGN_IN">Sign in</SubmitButton>
+        <SubmitButton mode="SIGN_UP">Create account</SubmitButton>
+      </div>
 
-      {state.status === "sent" ? (
-        <p
-          role="status"
-          className="rounded-md border border-mint/50 bg-mint/15 px-3 py-2 text-sm text-ink"
-        >
-          {state.message}
-        </p>
-      ) : null}
       {state.status === "error" ? (
         <p
           role="alert"
@@ -67,16 +60,24 @@ export function LoginForm({
   );
 }
 
-function SubmitButton() {
+function SubmitButton({
+  mode,
+  children
+}: {
+  mode: "SIGN_IN" | "SIGN_UP";
+  children: string;
+}) {
   const { pending } = useFormStatus();
 
   return (
     <button
       type="submit"
+      name="mode"
+      value={mode}
       disabled={pending}
-      className="inline-flex h-11 w-full items-center justify-center rounded-md bg-teal px-4 text-sm font-semibold text-white transition hover:bg-teal/90 disabled:cursor-wait disabled:opacity-70"
+      className="inline-flex h-11 items-center justify-center rounded-md bg-teal px-4 text-sm font-semibold text-white transition hover:bg-teal/90 disabled:cursor-wait disabled:opacity-70"
     >
-      {pending ? "Sending link..." : "Send magic link"}
+      {pending ? "Please wait..." : children}
     </button>
   );
 }

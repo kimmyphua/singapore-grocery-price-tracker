@@ -90,32 +90,28 @@ describe("protected server entry point coverage", () => {
   );
 });
 
-describe("AppSession enforcement behavior", () => {
+describe("Supabase session enforcement behavior", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("redirects an expired AppSession away from the dashboard", async () => {
+  it("redirects a missing session away from the dashboard", async () => {
     requireAppSessionMock.mockRejectedValue(
       new AuthSessionError(
-        "SESSION_EXPIRED",
-        "The application session has expired."
+        "SESSION_MISSING",
+        "No authenticated Supabase session was found."
       )
     );
 
-    await expect(DashboardPage()).rejects.toThrow(
-      "NEXT_REDIRECT:/auth/session-expired"
-    );
-    expect(redirectMock).toHaveBeenCalledWith(
-      "/auth/session-expired"
-    );
+    await expect(DashboardPage()).rejects.toThrow("NEXT_REDIRECT:/login");
+    expect(redirectMock).toHaveBeenCalledWith("/login");
   });
 
-  it("returns 401 JSON for an expired AppSession on /api/products", async () => {
+  it("returns 401 JSON for a missing session on /api/products", async () => {
     requireAppSessionMock.mockRejectedValue(
       new AuthSessionError(
-        "SESSION_EXPIRED",
-        "The application session has expired."
+        "SESSION_MISSING",
+        "No authenticated Supabase session was found."
       )
     );
 

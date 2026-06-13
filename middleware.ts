@@ -2,11 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { parsePublicSupabaseEnv } from "@/lib/env";
 
-const PUBLIC_AUTH_PATHS = new Set([
-  "/login",
-  "/auth/callback",
-  "/auth/session-expired"
-]);
+const PUBLIC_AUTH_PATHS = new Set(["/login"]);
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

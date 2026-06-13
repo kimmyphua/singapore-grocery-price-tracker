@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AuthApiError,
-  AuthInvalidJwtError,
   AuthRetryableFetchError,
   AuthSessionMissingError
 } from "@supabase/auth-js";
@@ -31,8 +30,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
-const SESSION_ID = "22222222-2222-4222-8222-222222222222";
-
 function createAuth(overrides: Record<string, unknown> = {}) {
   return {
     getUser: vi.fn(async () => ({
@@ -44,16 +41,6 @@ function createAuth(overrides: Record<string, unknown> = {}) {
       },
       error: null
     })),
-    getClaims: vi.fn(async () => ({
-      data: {
-        claims: {
-          sub: USER_ID,
-          session_id: SESSION_ID
-        }
-      },
-      error: null
-    })),
-    signOut: vi.fn(async () => ({ error: null })),
     ...overrides
   };
 }
@@ -61,10 +48,6 @@ function createAuth(overrides: Record<string, unknown> = {}) {
 function createDb(overrides: Record<string, unknown> = {}) {
   return {
     upsertProfile: vi.fn(async () => ({ id: "profile-1" })),
-    findSession: vi.fn(async () => ({
-      profileId: "profile-1",
-      expiresAt: new Date("2026-06-12T01:00:00Z")
-    })),
     ...overrides
   };
 }
@@ -138,31 +121,23 @@ describe("Supabase client factories", () => {
 });
 
 describe("requireAppSession", () => {
-  it("returns an AuthContext from verified identity and claims", async () => {
+  it("returns an AuthContext from the verified Supabase user", async () => {
     const auth = createAuth();
     const db = createDb();
 
     await expect(
-      requireAppSession({
-        now: new Date("2026-06-12T00:00:00Z"),
-        auth,
-        db
-      })
+      requireAppSession({ auth, db })
     ).resolves.toEqual({
       profileId: "profile-1",
       supabaseUserId: USER_ID,
-      email: "User@Example.com",
-      supabaseSessionId: SESSION_ID
+      email: "User@Example.com"
     });
 
     expect(auth.getUser).toHaveBeenCalledOnce();
-    expect(auth.getClaims).toHaveBeenCalledOnce();
     expect(db.upsertProfile).toHaveBeenCalledWith({
       supabaseUserId: USER_ID,
       email: "User@Example.com"
     });
-    expect(db.findSession).toHaveBeenCalledWith(SESSION_ID);
-    expect(auth.signOut).not.toHaveBeenCalled();
   });
 
   it("rejects a missing authenticated user with a typed error", async () => {
@@ -179,7 +154,6 @@ describe("requireAppSession", () => {
       name: "AuthSessionError",
       code: "SESSION_MISSING"
     });
-    expect(auth.getClaims).not.toHaveBeenCalled();
   });
 
   it("treats an absent user without an auth error as a missing session", async () => {
@@ -202,21 +176,6 @@ describe("requireAppSession", () => {
       getUser: vi.fn(async () => ({
         data: { user: null },
         error: new AuthApiError("JWT expired", 401, "bad_jwt")
-      }))
-    });
-
-    await expect(
-      requireAppSession({ auth, db: createDb() })
-    ).rejects.toMatchObject({
-      code: "SESSION_INVALID"
-    });
-  });
-
-  it("treats a rejected verified JWT as an invalid session", async () => {
-    const auth = createAuth({
-      getClaims: vi.fn(async () => ({
-        data: null,
-        error: new AuthInvalidJwtError("Invalid JWT signature")
       }))
     });
 
@@ -277,61 +236,6 @@ describe("requireAppSession", () => {
     expect(JSON.stringify(error)).not.toContain("secret-token");
   });
 
-  it("reports claims transport failures as provider errors", async () => {
-    const auth = createAuth({
-      getClaims: vi.fn(async () => ({
-        data: null,
-        error: new AuthApiError(
-          "service unavailable with sensitive details",
-          502,
-          "bad_gateway"
-        )
-      }))
-    });
-
-    await expect(
-      requireAppSession({ auth, db: createDb() })
-    ).rejects.toMatchObject({
-      code: "SESSION_PROVIDER_ERROR",
-      cause: {
-        name: "AuthApiError",
-        status: 502,
-        code: "bad_gateway"
-      }
-    });
-  });
-
-  it.each([
-    {
-      name: "missing session_id",
-      claims: { sub: USER_ID }
-    },
-    {
-      name: "malformed session_id",
-      claims: { sub: USER_ID, session_id: "client-supplied-value" }
-    },
-    {
-      name: "a subject that differs from the verified user",
-      claims: {
-        sub: "33333333-3333-4333-8333-333333333333",
-        session_id: SESSION_ID
-      }
-    }
-  ])("rejects verified claims with $name", async ({ claims }) => {
-    const auth = createAuth({
-      getClaims: vi.fn(async () => ({
-        data: { claims },
-        error: null
-      }))
-    });
-
-    await expect(
-      requireAppSession({ auth, db: createDb() })
-    ).rejects.toMatchObject({
-      code: "SESSION_INVALID"
-    });
-  });
-
   it("rejects a user without a verified email", async () => {
     const auth = createAuth({
       getUser: vi.fn(async () => ({
@@ -347,76 +251,4 @@ describe("requireAppSession", () => {
     });
   });
 
-  it("rejects an application session that does not exist", async () => {
-    const db = createDb({
-      findSession: vi.fn(async () => null)
-    });
-
-    await expect(
-      requireAppSession({ auth: createAuth(), db })
-    ).rejects.toMatchObject({
-      code: "SESSION_INVALID"
-    });
-  });
-
-  it("rejects an application session owned by another profile", async () => {
-    const db = createDb({
-      findSession: vi.fn(async () => ({
-        profileId: "profile-2",
-        expiresAt: new Date("2026-06-12T01:00:00Z")
-      }))
-    });
-
-    await expect(
-      requireAppSession({ auth: createAuth(), db })
-    ).rejects.toMatchObject({
-      code: "SESSION_INVALID"
-    });
-  });
-
-  it("rejects an expired application session and signs out locally", async () => {
-    const signOut = vi.fn(async () => ({ error: null }));
-    const auth = createAuth({ signOut });
-    const db = createDb({
-      findSession: vi.fn(async () => ({
-        profileId: "profile-1",
-        expiresAt: new Date("2026-06-11T23:59:59Z")
-      }))
-    });
-
-    await expect(
-      requireAppSession({
-        now: new Date("2026-06-12T00:00:00Z"),
-        auth,
-        db
-      })
-    ).rejects.toMatchObject({
-      code: "SESSION_EXPIRED"
-    });
-    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
-  });
-
-  it("preserves the typed expiry error when local sign-out fails", async () => {
-    const signOut = vi.fn(async () => {
-      throw new Error("Cookie store is read-only");
-    });
-    const auth = createAuth({ signOut });
-    const db = createDb({
-      findSession: vi.fn(async () => ({
-        profileId: "profile-1",
-        expiresAt: new Date("2026-06-12T00:00:00Z")
-      }))
-    });
-
-    await expect(
-      requireAppSession({
-        now: new Date("2026-06-12T00:00:00Z"),
-        auth,
-        db
-      })
-    ).rejects.toMatchObject({
-      code: "SESSION_EXPIRED"
-    });
-    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
-  });
 });

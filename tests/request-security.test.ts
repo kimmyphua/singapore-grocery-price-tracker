@@ -92,19 +92,6 @@ describe("same-origin mutation protection", () => {
   );
 });
 
-describe("expired-session cleanup route", () => {
-  it("runs local signout in a writable Route Handler", () => {
-    const source = readFileSync(
-      "src/app/auth/session-expired/route.ts",
-      "utf8"
-    );
-
-    expect(source).toContain("export async function GET");
-    expect(source).toContain("handleSignOut");
-    expect(source).toContain("createSupabaseServerClient");
-  });
-});
-
 function listFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true })
     .flatMap((entry) => {
