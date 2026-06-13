@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  getListingRefreshTransactionOptions,
   refreshOwnerListings,
   refreshRetailerListing,
   runScheduledRefresh,
@@ -67,6 +68,13 @@ const scraped = {
 };
 
 describe("shared listing refresh", () => {
+  it("allows slow public retailer requests to finish inside the listing lock", () => {
+    expect(getListingRefreshTransactionOptions()).toEqual({
+      maxWait: 10_000,
+      timeout: 120_000
+    });
+  });
+
   it("scrapes and stores one snapshot for a URL shared by two joins", async () => {
     const { store, snapshots } = createStore();
     const scraper = vi.fn(async () => scraped);

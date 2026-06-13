@@ -243,6 +243,13 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+export function getListingRefreshTransactionOptions() {
+  return {
+    maxWait: 10_000,
+    timeout: 120_000
+  };
+}
+
 type PrismaRefreshClient = PrismaClient | Prisma.TransactionClient;
 
 function createPrismaOperations(
@@ -300,21 +307,26 @@ function createPrismaOperations(
 const prismaSharedListingRefreshStore: SharedListingRefreshStore = {
   ...createPrismaOperations(prisma),
   withListingLock(listingId, operation) {
-    return prisma.$transaction(async (transaction) => {
-      const rows = await transaction.$queryRaw<Array<{ locked: boolean }>>`
-        SELECT pg_try_advisory_xact_lock(
-          hashtextextended(${listingId}, 0)
-        ) AS locked
-      `;
-      if (!rows[0]?.locked) {
-        return { acquired: false };
-      }
+    return prisma.$transaction(
+      async (transaction) => {
+        const rows = await transaction.$queryRaw<
+          Array<{ locked: boolean }>
+        >`
+          SELECT pg_try_advisory_xact_lock(
+            hashtextextended(${listingId}, 0)
+          ) AS locked
+        `;
+        if (!rows[0]?.locked) {
+          return { acquired: false };
+        }
 
-      return {
-        acquired: true,
-        value: await operation(createPrismaOperations(transaction))
-      };
-    });
+        return {
+          acquired: true,
+          value: await operation(createPrismaOperations(transaction))
+        };
+      },
+      getListingRefreshTransactionOptions()
+    );
   },
   async resolveOwnerListingIds(ownerId, trackedProductId) {
     const rows = await prisma.trackedProductListing.findMany({
