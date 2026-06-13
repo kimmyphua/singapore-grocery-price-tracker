@@ -192,6 +192,7 @@ describe("auth callback", () => {
     duration: LoginIntentDuration
   ): AuthCallbackDependencies & {
     auth: AuthCallbackDependencies["auth"] & {
+      exchangeCodeForSession: ReturnType<typeof vi.fn>;
       verifyOtp: ReturnType<typeof vi.fn>;
     };
     db: AuthCallbackDependencies["db"] & {
@@ -213,6 +214,10 @@ describe("auth callback", () => {
         }
       },
       auth: {
+        exchangeCodeForSession: vi.fn(async () => ({
+          data: {},
+          error: null
+        })),
         verifyOtp: vi.fn(async () => ({
           data: {},
           error: null
@@ -272,6 +277,23 @@ describe("auth callback", () => {
     }
   );
 
+  it("accepts Supabase's default PKCE magic-link callback", async () => {
+    const dependencies = createDependencies("ONE_DAY");
+    const response = await handleAuthCallback(
+      new Request(
+        "https://prices.example/auth/callback?code=pkce-code&intent=opaque-nonce"
+      ),
+      dependencies
+    );
+
+    expect(dependencies.auth.exchangeCodeForSession).toHaveBeenCalledWith(
+      "pkce-code"
+    );
+    expect(dependencies.auth.verifyOtp).not.toHaveBeenCalled();
+    expect(dependencies.db.createSession).toHaveBeenCalled();
+    expect(response.headers.get("location")).toBe("https://prices.example/");
+  });
+
   it("rejects malformed callback payloads without calling Supabase", async () => {
     const dependencies = createDependencies("ONE_DAY");
     const response = await handleAuthCallback(
@@ -279,6 +301,7 @@ describe("auth callback", () => {
       dependencies
     );
 
+    expect(dependencies.auth.exchangeCodeForSession).not.toHaveBeenCalled();
     expect(dependencies.auth.verifyOtp).not.toHaveBeenCalled();
     expect(response.headers.get("location")).toBe(
       "https://prices.example/login?error=invalid_link"

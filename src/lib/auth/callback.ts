@@ -7,6 +7,9 @@ import {
 import { prisma } from "@/lib/db";
 
 type CallbackAuthAdapter = {
+  exchangeCodeForSession(
+    code: string
+  ): Promise<{ data: unknown; error: unknown }>;
   verifyOtp(input: {
     token_hash: string;
     type: "email";
@@ -42,11 +45,17 @@ export type AuthCallbackDependencies = {
   now?: Date;
 };
 
-const callbackPayloadSchema = z.object({
-  token_hash: z.string().min(1).max(4096),
-  type: z.literal("email"),
-  intent: z.string().min(1).max(256)
-});
+const callbackPayloadSchema = z.union([
+  z.object({
+    code: z.string().min(1).max(4096),
+    intent: z.string().min(1).max(256)
+  }),
+  z.object({
+    token_hash: z.string().min(1).max(4096),
+    type: z.literal("email"),
+    intent: z.string().min(1).max(256)
+  })
+]);
 
 const verifiedUserSchema = z.object({
   id: z.string().uuid(),
@@ -77,11 +86,17 @@ export async function handleAuthCallback(
   dependencies: AuthCallbackDependencies
 ) {
   const url = new URL(request.url);
-  const payload = callbackPayloadSchema.safeParse({
-    token_hash: url.searchParams.get("token_hash"),
-    type: url.searchParams.get("type"),
-    intent: url.searchParams.get("intent")
-  });
+  const intent = url.searchParams.get("intent");
+  const code = url.searchParams.get("code");
+  const payload = callbackPayloadSchema.safeParse(
+    code
+      ? { code, intent }
+      : {
+          token_hash: url.searchParams.get("token_hash"),
+          type: url.searchParams.get("type"),
+          intent
+        }
+  );
 
   if (!payload.success) {
     return loginRedirect(dependencies.appOrigin, "invalid_link");
@@ -90,10 +105,13 @@ export async function handleAuthCallback(
   let verificationCompleted = false;
 
   try {
-    const verification = await dependencies.auth.verifyOtp({
-      token_hash: payload.data.token_hash,
-      type: payload.data.type
-    });
+    const verification =
+      "code" in payload.data
+        ? await dependencies.auth.exchangeCodeForSession(payload.data.code)
+        : await dependencies.auth.verifyOtp({
+            token_hash: payload.data.token_hash,
+            type: payload.data.type
+          });
 
     if (verification.error) {
       return loginRedirect(dependencies.appOrigin, "invalid_link");
