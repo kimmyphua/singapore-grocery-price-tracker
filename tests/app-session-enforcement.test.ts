@@ -41,6 +41,9 @@ const PROTECTED_PAGES = [
 const PROTECTED_ROUTE_HANDLERS = [
   "src/app/api/prices/latest/route.ts",
   "src/app/api/prices/refresh/route.ts",
+  "src/app/api/products/[id]/listings/route.ts",
+  "src/app/api/products/[id]/route.ts",
+  "src/app/api/products/preview/route.ts",
   "src/app/api/products/route.ts",
   "src/app/api/promotions/deals/[id]/route.ts",
   "src/app/api/promotions/deals/bulk/route.ts",

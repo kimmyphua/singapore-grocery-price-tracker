@@ -2,6 +2,7 @@ import {
   normalizeProductTitle,
   parsePackSize
 } from "@/lib/products/normalize";
+import { z } from "zod";
 import type { SupportedProductUrl } from "@/lib/products/url-policy";
 import { parseSupportedProductUrl } from "@/lib/products/url-policy";
 import { fetchRetailerPage } from "@/lib/scraping/http";
@@ -9,25 +10,27 @@ import { parseProductPage } from "@/lib/scraping/parse-product-page";
 import type { ParsedRetailerProduct } from "@/lib/scraping/product-page-types";
 import type { RetailerSlug } from "@/lib/scraping/types";
 
-export type ProductPreview = {
-  retailerSlug: RetailerSlug;
-  canonicalUrl: string;
-  retailerSku?: string;
-  titleRaw: string;
-  name: string;
-  brand: string;
-  family: string;
-  flavour: string | null;
-  packCount: number;
-  unitSize: number;
-  unit: string;
-  totalSize: number;
-  imageUrl: string | null;
-  price: number;
-  originalPrice: number | null;
-  promotionText: string | null;
-  isAvailable: boolean;
-};
+export const productPreviewSchema = z.object({
+  retailerSlug: z.enum(["fairprice", "cold-storage", "redmart"]),
+  canonicalUrl: z.string().url(),
+  retailerSku: z.string().min(1).optional(),
+  titleRaw: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  brand: z.string().trim().min(1),
+  family: z.string().trim().min(1),
+  flavour: z.string().trim().min(1).nullable(),
+  packCount: z.number().int().positive(),
+  unitSize: z.number().positive(),
+  unit: z.string().trim().min(1),
+  totalSize: z.number().positive(),
+  imageUrl: z.string().url().nullable(),
+  price: z.number().positive(),
+  originalPrice: z.number().positive().nullable(),
+  promotionText: z.string().trim().min(1).nullable(),
+  isAvailable: z.boolean()
+});
+
+export type ProductPreview = z.infer<typeof productPreviewSchema>;
 
 export type ProductPreviewErrorCode =
   | "FETCH_FAILED"

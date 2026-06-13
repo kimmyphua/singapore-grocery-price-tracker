@@ -1,12 +1,15 @@
-import type { RetailerSlug } from "@/lib/scraping/types";
+export type SupportedProductRetailerSlug =
+  | "fairprice"
+  | "cold-storage"
+  | "redmart";
 
 export type SupportedProductUrl = {
-  retailerSlug: RetailerSlug;
+  retailerSlug: SupportedProductRetailerSlug;
   canonicalUrl: string;
 };
 
 type RetailerUrlRule = {
-  retailerSlug: RetailerSlug;
+  retailerSlug: SupportedProductRetailerSlug;
   productPath: RegExp;
 };
 
