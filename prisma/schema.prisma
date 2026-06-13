@@ -21,20 +21,14 @@ enum ScrapeRunStatus {
   FAILED
 }
 
-enum PromotionCategory {
-  SNACKS
-  ICE_CREAM
+enum FlyerSourceKind {
+  DIRECT_PDF
+  PUBLITAS
 }
 
-enum PromotionFlyerStatus {
-  IMPORTED
-  PARSE_FAILED
-}
-
-enum PromotionReviewStatus {
-  PENDING
-  APPROVED
-  REJECTED
+enum FlyerAssetKind {
+  PDF
+  PUBLICATION
 }
 
 enum AppSessionDuration {
@@ -67,8 +61,7 @@ model Retailer {
 
   listings               RetailerListing[]
   scrapeRuns             ScrapeRun[]
-  promotionFlyers        PromotionFlyer[]
-  promotionDeals         PromotionDeal[]
+  flyerSources           FlyerSource[]
   trackedProductListings TrackedProductListing[]
 }
 
@@ -248,57 +241,43 @@ model ScrapeRun {
   priceSnapshots PriceSnapshot[]
 }
 
-model PromotionFlyer {
-  id           String               @id @default(cuid())
-  seriesKey    String
-  retailerId   String
-  title        String
-  sourceUrl    String
-  assetUrl     String
-  assetPath    String
-  assetHash    String               @unique
-  validFrom    DateTime?
-  validTo      DateTime?
-  fetchedAt    DateTime             @default(now())
-  status       PromotionFlyerStatus @default(IMPORTED)
-  errorMessage String?
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+model FlyerSource {
+  id               String          @id @default(cuid())
+  key              String          @unique
+  retailerId       String
+  title            String
+  landingUrl       String
+  kind             FlyerSourceKind
+  isActive         Boolean         @default(true)
+  lastCheckedAt    DateTime?
+  lastCheckStatus  String?
+  lastErrorMessage String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
-  retailer Retailer        @relation(fields: [retailerId], references: [id])
-  deals    PromotionDeal[]
+  retailer Retailer       @relation(fields: [retailerId], references: [id])
+  editions FlyerEdition[]
 
-  @@index([retailerId])
-  @@index([seriesKey, validFrom])
-  @@index([seriesKey, validTo])
-  @@index([validFrom, validTo])
+  @@index([retailerId, isActive])
 }
 
-model PromotionDeal {
-  id           String                @id @default(cuid())
-  flyerId      String
-  retailerId   String
-  category     PromotionCategory
-  rawTitle     String
-  packText     String?
-  priceText    String?
-  parsedPrice  Decimal?              @db.Decimal(10, 2)
-  promoText    String?
-  pageNumber   Int
-  sourceX      Float?
-  sourceY      Float?
-  sourceWidth  Float?
-  sourceHeight Float?
-  confidence   Float
-  reviewStatus PromotionReviewStatus @default(PENDING)
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
+model FlyerEdition {
+  id             String         @id @default(cuid())
+  sourceId       String
+  title          String
+  sourceUrl      String
+  directPdfUrl   String?
+  storagePath    String?
+  publicationUrl String?
+  assetKind      FlyerAssetKind
+  contentHash    String
+  validFrom      DateTime?
+  validTo        DateTime?
+  firstSeenAt    DateTime       @default(now())
+  lastCheckedAt  DateTime       @default(now())
 
-  flyer    PromotionFlyer @relation(fields: [flyerId], references: [id])
-  retailer Retailer       @relation(fields: [retailerId], references: [id])
+  source FlyerSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
-  @@index([reviewStatus])
-  @@index([category])
-  @@index([retailerId])
-  @@index([flyerId])
+  @@unique([sourceId, contentHash])
+  @@index([sourceId, firstSeenAt])
 }
