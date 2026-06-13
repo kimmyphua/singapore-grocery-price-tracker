@@ -13,4 +13,5 @@ export type ParsedRetailerProduct = {
   currency?: string;
   promotionText?: string;
   size?: string;
+  rawMetadata?: Record<string, unknown>;
 };

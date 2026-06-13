@@ -1,0 +1,153 @@
+import {
+  normalizeProductTitle,
+  parsePackSize
+} from "@/lib/products/normalize";
+import type { SupportedProductUrl } from "@/lib/products/url-policy";
+import { parseSupportedProductUrl } from "@/lib/products/url-policy";
+import { fetchRetailerPage } from "@/lib/scraping/http";
+import { parseProductPage } from "@/lib/scraping/parse-product-page";
+import type { ParsedRetailerProduct } from "@/lib/scraping/product-page-types";
+import type { RetailerSlug } from "@/lib/scraping/types";
+
+export type ProductPreview = {
+  retailerSlug: RetailerSlug;
+  canonicalUrl: string;
+  retailerSku?: string;
+  titleRaw: string;
+  name: string;
+  brand: string;
+  family: string;
+  flavour: string | null;
+  packCount: number;
+  unitSize: number;
+  unit: string;
+  totalSize: number;
+  imageUrl: string | null;
+  price: number;
+  originalPrice: number | null;
+  promotionText: string | null;
+  isAvailable: boolean;
+};
+
+export type ProductPreviewErrorCode =
+  | "FETCH_FAILED"
+  | "PARSE_FAILED"
+  | "MISSING_TITLE"
+  | "MISSING_BRAND"
+  | "INVALID_PRICE"
+  | "INVALID_PACK_SIZE"
+  | "RETAILER_MISMATCH";
+
+export class ProductPreviewError extends Error {
+  constructor(readonly code: ProductPreviewErrorCode) {
+    super(code);
+    this.name = "ProductPreviewError";
+  }
+}
+
+type ProductPreviewDependencies = {
+  fetchPage?: (url: string) => Promise<string>;
+  parsePage?: (html: string, url: string) => ParsedRetailerProduct;
+};
+
+export async function previewProductUrl(
+  input: string,
+  dependencies: ProductPreviewDependencies = {}
+): Promise<ProductPreview> {
+  const supportedUrl = parseSupportedProductUrl(input);
+  const fetchPage = dependencies.fetchPage ?? fetchRetailerPage;
+  const parsePage = dependencies.parsePage ?? parseProductPage;
+  let html: string;
+
+  try {
+    html = await fetchPage(supportedUrl.canonicalUrl);
+  } catch {
+    throw new ProductPreviewError("FETCH_FAILED");
+  }
+
+  let parsed: ParsedRetailerProduct;
+  try {
+    parsed = parsePage(html, supportedUrl.canonicalUrl);
+  } catch {
+    throw new ProductPreviewError("PARSE_FAILED");
+  }
+
+  return buildProductPreview(parsed, supportedUrl);
+}
+
+export function buildProductPreview(
+  parsed: ParsedRetailerProduct,
+  supportedUrl: SupportedProductUrl
+): ProductPreview {
+  if (parsed.retailerSlug !== supportedUrl.retailerSlug) {
+    throw new ProductPreviewError("RETAILER_MISMATCH");
+  }
+
+  const titleRaw = normalizeText(parsed.titleRaw);
+  if (!titleRaw) {
+    throw new ProductPreviewError("MISSING_TITLE");
+  }
+
+  const brand = normalizeText(parsed.brandRaw ?? "");
+  if (!brand) {
+    throw new ProductPreviewError("MISSING_BRAND");
+  }
+
+  if (
+    parsed.price === null ||
+    !Number.isFinite(parsed.price) ||
+    parsed.price <= 0
+  ) {
+    throw new ProductPreviewError("INVALID_PRICE");
+  }
+
+  const sizeSource = normalizeText(`${titleRaw} ${parsed.size ?? ""}`);
+  if (!containsPackSize(sizeSource)) {
+    throw new ProductPreviewError("INVALID_PACK_SIZE");
+  }
+
+  const normalized = normalizeProductTitle(sizeSource);
+  const pack = parsePackSize(sizeSource);
+
+  return {
+    retailerSlug: supportedUrl.retailerSlug,
+    canonicalUrl: supportedUrl.canonicalUrl,
+    retailerSku: normalizeOptional(parsed.retailerSku),
+    titleRaw,
+    name: titleRaw,
+    brand,
+    family: normalized.family,
+    flavour: normalized.flavour,
+    ...pack,
+    imageUrl: normalizeOptional(parsed.imageUrl) ?? null,
+    price: parsed.price,
+    originalPrice:
+      parsed.originalPrice !== null &&
+      Number.isFinite(parsed.originalPrice) &&
+      parsed.originalPrice > 0
+        ? parsed.originalPrice
+        : null,
+    promotionText: normalizeOptional(parsed.promotionText) ?? null,
+    isAvailable: parsed.isAvailable
+  };
+}
+
+function containsPackSize(value: string): boolean {
+  return (
+    /\b\d+(?:\.\d+)?\s*(?:x|×)\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|l)\b/i.test(
+      value
+    ) ||
+    /\b\d+(?:\.\d+)?\s*(?:kg|g|ml|l)\b/i.test(value) ||
+    /\b(?:pack of|x)\s*\d+\b/i.test(value) ||
+    /\b\d+\s*(?:pcs|pieces|s)\b/i.test(value)
+  );
+}
+
+function normalizeText(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function normalizeOptional(value: string | undefined): string | undefined {
+  const normalized = value ? normalizeText(value) : "";
+  return normalized || undefined;
+}
