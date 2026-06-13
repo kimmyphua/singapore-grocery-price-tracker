@@ -67,7 +67,9 @@ export const prismaLoginIntentStore: LoginIntentStore = {
 
       for (const key of [input.emailHash, input.requesterHash].sort()) {
         await transaction.$queryRaw`
-          SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))
+          SELECT
+            pg_advisory_xact_lock(hashtextextended(${key}, 0))
+              IS NOT NULL AS locked
         `;
       }
 

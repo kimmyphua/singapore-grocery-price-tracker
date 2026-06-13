@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   EMAIL_LOGIN_LIMIT,
@@ -78,6 +79,17 @@ function createFakeStore(): LoginIntentStore & {
 }
 
 describe("login intents", () => {
+  it("casts advisory lock results to a Prisma-supported scalar", () => {
+    const source = readFileSync(
+      "src/lib/auth/login-intents.ts",
+      "utf8"
+    );
+
+    expect(source).toMatch(
+      /pg_advisory_xact_lock\(hashtextextended\(\$\{key\}, 0\)\)\s+IS NOT NULL AS locked/
+    );
+  });
+
   it("stores only a SHA-256 hash of a 32-byte opaque nonce", async () => {
     const store = createFakeStore();
     const now = new Date("2026-06-12T00:00:00.000Z");
