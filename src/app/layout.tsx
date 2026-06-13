@@ -1,27 +1,42 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Nunito } from "next/font/google";
+import { requireAppSession } from "@/lib/auth/session";
 import "./globals.css";
+
+const nunito = Nunito({ subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
   title: "Singapore Grocery Price Tracker",
   description: "Compare Singapore supermarket prices for recurring grocery items."
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({
+  children
+}: {
+  children: ReactNode;
+}) {
+  const session = await requireAppSession().catch(() => null);
+
   return (
     <html lang="en">
-      <body>
+      <body className={nunito.className}>
         <div className="min-h-screen bg-mist">
-          <header className="border-b border-teal/15 bg-white">
+          <header className="border-b border-sage bg-white/90">
             <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-5">
-              <a href="/" className="text-sm font-semibold text-ink">
+              <a href="/" className="text-sm font-extrabold text-ink">
                 SG Grocery Tracker
               </a>
-              <div className="flex gap-4 text-sm text-slate-600">
-                <a href="/products">Products</a>
-                <a href="/deals">Deals</a>
-                <a href="/admin/promotions">Review</a>
-              </div>
+              {session ? (
+                <div className="flex items-center gap-3 text-sm font-bold text-ink sm:gap-5">
+                  <a href="/">Dashboard</a>
+                  <a href="/products">Products</a>
+                  <a href="/account">Account</a>
+                  <form action="/auth/signout" method="post">
+                    <button type="submit">Sign out</button>
+                  </form>
+                </div>
+              ) : null}
             </nav>
           </header>
           <main className="mx-auto max-w-6xl px-4 py-6 sm:px-5 sm:py-8">{children}</main>

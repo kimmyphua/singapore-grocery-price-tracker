@@ -1,9 +1,10 @@
-import { products, retailers } from "@/lib/data/seed-data";
 import { requireProtectedPage } from "@/lib/auth/guards";
 import type { LatestPrice, PriceHistory, WeeklyPriceHistorySort } from "@/lib/data/seed-data";
 import { getCachedLatestPrices, getCachedWeeklyPriceHistory } from "@/lib/pricing/cached-prices";
+import { getTrackedProductRows } from "@/lib/products/queries";
 import { notFound } from "next/navigation";
 import { RefreshButton } from "@/app/refresh-button";
+import { ProductActions } from "./product-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +23,28 @@ export default async function ProductDetailPage({
   params: { slug: string };
   searchParams?: ProductDetailSearchParams;
 }) {
-  await requireProtectedPage();
-  const product = products.find((item) => item.slug === params.slug);
+  const { profileId } = await requireProtectedPage();
+  const [product] = await getTrackedProductRows(undefined, profileId, {
+    productSlug: params.slug
+  });
   if (!product) {
     notFound();
   }
 
-  const historyControls = getHistoryControls(searchParams);
+  const retailers = product.listings.map(
+    ({ retailerListing }) => retailerListing.retailer
+  );
+  const historyControls = getHistoryControls(
+    searchParams,
+    retailers.map((retailer) => retailer.slug)
+  );
   const [prices, priceHistory] = await Promise.all([
-    getCachedLatestPrices(undefined, { productSlug: product.slug }),
+    getCachedLatestPrices(undefined, {
+      ownerId: profileId,
+      productSlug: product.slug
+    }),
     getCachedWeeklyPriceHistory(undefined, {
+      ownerId: profileId,
       productSlug: product.slug,
       retailerSlug: historyControls.retailerSlug,
       query: historyControls.query,
@@ -57,9 +70,15 @@ export default async function ProductDetailPage({
         <div className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-teal/10">
           <p className="text-sm font-semibold text-teal">{product.family}</p>
           <h1 className="mt-2 text-3xl font-semibold text-ink">
-            {product.brand} {product.flavour ?? product.family}
+            {product.name}
           </h1>
-          <p className="mt-2 text-slate-600">{product.pack}</p>
+          <p className="mt-2 text-slate-600">{formatPack(product)}</p>
+          <div className="mt-4">
+            <ProductActions
+              productId={product.id}
+              productSlug={product.slug}
+            />
+          </div>
         </div>
         <div className="rounded-lg border border-mint/40 bg-mint/15 p-5">
           <p className="text-sm font-semibold text-ink">Best value</p>
@@ -89,7 +108,7 @@ export default async function ProductDetailPage({
               Out-of-stock online prices are still shown because store availability can differ by area.
             </p>
           </div>
-          <RefreshButton productSlug={product.slug} />
+          <RefreshButton trackedProductId={product.id} />
         </div>
         {sortedPrices.length === 0 ? (
           <p className="px-4 py-5 text-sm text-slate-600">
@@ -322,9 +341,15 @@ type HistoryControls = {
   pageSize: number;
 };
 
-function getHistoryControls(searchParams: ProductDetailSearchParams | undefined): HistoryControls {
+function getHistoryControls(
+  searchParams: ProductDetailSearchParams | undefined,
+  retailerSlugs: string[]
+): HistoryControls {
   return {
-    retailerSlug: getRetailerSlug(searchParams?.historyRetailer),
+    retailerSlug: getRetailerSlug(
+      searchParams?.historyRetailer,
+      retailerSlugs
+    ),
     query: searchParams?.historyQuery?.trim() ?? "",
     sort: getHistorySort(searchParams?.historySort),
     direction: searchParams?.historyDirection === "asc" ? "asc" : "desc",
@@ -333,8 +358,21 @@ function getHistoryControls(searchParams: ProductDetailSearchParams | undefined)
   };
 }
 
-function getRetailerSlug(value: string | undefined) {
-  return retailers.some((retailer) => retailer.slug === value) ? value : undefined;
+function getRetailerSlug(
+  value: string | undefined,
+  retailerSlugs: string[]
+) {
+  return value && retailerSlugs.includes(value) ? value : undefined;
+}
+
+function formatPack(product: {
+  packCount: number;
+  unitSize: number;
+  unit: string;
+}) {
+  return product.packCount > 1
+    ? `${product.packCount} x ${product.unitSize}${product.unit}`
+    : `${product.unitSize}${product.unit}`;
 }
 
 function getHistorySort(value: string | undefined): WeeklyPriceHistorySort {

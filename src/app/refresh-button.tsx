@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { FullPageLoadingOverlay } from "./full-page-loading-overlay";
 
-export function RefreshButton({ productSlug }: { productSlug?: string }) {
+export function RefreshButton({
+  trackedProductId
+}: {
+  trackedProductId?: string;
+}) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
 
   async function refreshPrices() {
@@ -12,7 +16,9 @@ export function RefreshButton({ productSlug }: { productSlug?: string }) {
       const response = await fetch("/api/prices/refresh", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(productSlug ? { productSlug } : {})
+        body: JSON.stringify(
+          trackedProductId ? { trackedProductId } : {}
+        )
       });
 
       if (!response.ok) {
@@ -34,7 +40,7 @@ export function RefreshButton({ productSlug }: { productSlug?: string }) {
           type="button"
           onClick={refreshPrices}
           disabled={state === "loading"}
-          className="inline-flex h-10 items-center justify-center rounded-md bg-teal px-4 text-sm font-semibold text-white transition hover:bg-teal/90 disabled:cursor-wait disabled:opacity-70"
+          className="inline-flex h-10 items-center justify-center rounded-full bg-peach px-4 text-sm font-bold text-ink transition hover:brightness-95 disabled:cursor-wait disabled:opacity-70"
         >
           {state === "loading" ? "Refreshing..." : "Refresh prices"}
         </button>

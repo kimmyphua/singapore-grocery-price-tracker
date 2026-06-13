@@ -5,15 +5,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#18202a",
-        mist: "#f5f7f8",
-        berry: "#f65db7",
-        mint: "#5bf0d4",
-        olive: "#9fab6b",
-        meadow: "#bbd7a6",
-        teal: "#53a5b7",
-        leaf: "#53a5b7",
-        citrus: "#9fab6b"
+        peach: "#ff9890",
+        ivory: "#fff9f3",
+        sage: "#bfd8b8",
+        lilac: "#c9b7f6",
+        charcoal: "#444444",
+        ink: "#444444",
+        mist: "#fff9f3",
+        berry: "#ff9890",
+        mint: "#bfd8b8",
+        olive: "#bfd8b8",
+        meadow: "#bfd8b8",
+        teal: "#ff9890",
+        leaf: "#bfd8b8",
+        citrus: "#c9b7f6"
       }
     }
   },

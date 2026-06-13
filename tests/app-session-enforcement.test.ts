@@ -30,11 +30,14 @@ import { GET as getProducts } from "@/app/api/products/route";
 import { AuthSessionError } from "@/lib/auth/session";
 
 const PROTECTED_PAGES = [
+  "src/app/account/page.tsx",
   "src/app/admin/matches/page.tsx",
   "src/app/admin/promotions/page.tsx",
   "src/app/deals/page.tsx",
   "src/app/page.tsx",
+  "src/app/products/[slug]/edit/page.tsx",
   "src/app/products/[slug]/page.tsx",
+  "src/app/products/new/page.tsx",
   "src/app/products/page.tsx"
 ];
 

@@ -1,17 +1,27 @@
-import { products, retailers } from "@/lib/data/seed-data";
 import { requireProtectedPage } from "@/lib/auth/guards";
 import type { LatestPrice } from "@/lib/data/seed-data";
 import { formatSingaporeDateTime } from "@/lib/format/date-time";
 import { getCachedLatestPrices } from "@/lib/pricing/cached-prices";
+import { getTrackedProductRows } from "@/lib/products/queries";
 import { RefreshButton } from "./refresh-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  await requireProtectedPage();
-  const latestPrices = await getCachedLatestPrices();
+  const { profileId } = await requireProtectedPage();
+  const [products, latestPrices] = await Promise.all([
+    getTrackedProductRows(undefined, profileId),
+    getCachedLatestPrices(undefined, { ownerId: profileId })
+  ]);
   const comparablePrices = latestPrices.filter((price) => price.effectiveUnitPrice !== null);
   const trackedProducts = products.length;
+  const retailers = new Set(
+    products.flatMap((product) =>
+      product.listings.map(
+        (listing) => listing.retailerListing.retailer.slug
+      )
+    )
+  );
   const productsWithPrices = new Set(comparablePrices.map((price) => price.productSlug)).size;
   const latestByProduct = products.map((product) => {
     const prices = comparablePrices.filter((price) => price.productSlug === product.slug);
@@ -46,7 +56,7 @@ export default async function DashboardPage() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Metric label="Tracked products" value={trackedProducts.toString()} />
-          <Metric label="Retailers" value={retailers.length.toString()} />
+          <Metric label="Retailers" value={retailers.size.toString()} />
           <Metric label="Products with prices" value={productsWithPrices.toString()} />
           <Metric label="Last updated" value={lastUpdated} />
         </div>
@@ -70,9 +80,11 @@ export default async function DashboardPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-ink">
-                    {product.brand} {product.flavour ?? product.family}
+                    {product.name}
                   </h3>
-                  <p className="mt-1 text-xs text-slate-500">{product.pack}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {formatPack(product)}
+                  </p>
                 </div>
                 <StatusBadge hasPrice={Boolean(cheapest)} />
               </div>
@@ -111,9 +123,11 @@ export default async function DashboardPage() {
                       href={`/products/${product.slug}`}
                       className="font-semibold text-ink"
                     >
-                      {product.brand} {product.flavour ?? product.family}
+                      {product.name}
                     </a>
-                    <div className="text-xs text-slate-500">{product.pack}</div>
+                    <div className="text-xs text-slate-500">
+                      {formatPack(product)}
+                    </div>
                   </td>
                   <td className="px-4 py-3">{cheapest?.retailerName ?? "No price yet"}</td>
                   <td className="px-4 py-3">{formatOriginalPrice(cheapest)}</td>
@@ -129,6 +143,16 @@ export default async function DashboardPage() {
       </section>
     </div>
   );
+}
+
+function formatPack(product: {
+  packCount: number;
+  unitSize: number;
+  unit: string;
+}) {
+  return product.packCount > 1
+    ? `${product.packCount} x ${product.unitSize}${product.unit}`
+    : `${product.unitSize}${product.unit}`;
 }
 
 function formatBestValue(price: {
