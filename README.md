@@ -87,6 +87,9 @@ Recommended future deployment:
 Required secrets for scheduled scraping:
 
 - `DATABASE_URL`
+- `DIRECT_URL`
 - `SCRAPER_USER_AGENT`
 
-The scheduled workflow is intentionally disabled by default and should be enabled only after retailer selectors are verified.
+The scheduled workflow runs at 12:00 AM and 12:00 PM Singapore time. Enable
+production execution only after retailer selectors and all repository secrets
+are configured.
