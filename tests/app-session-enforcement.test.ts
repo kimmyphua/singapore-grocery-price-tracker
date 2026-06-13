@@ -34,6 +34,8 @@ const PROTECTED_PAGES = [
   "src/app/admin/matches/page.tsx",
   "src/app/admin/promotions/page.tsx",
   "src/app/deals/page.tsx",
+  "src/app/flyers/[id]/page.tsx",
+  "src/app/flyers/page.tsx",
   "src/app/page.tsx",
   "src/app/products/[slug]/edit/page.tsx",
   "src/app/products/[slug]/page.tsx",
@@ -42,6 +44,7 @@ const PROTECTED_PAGES = [
 ];
 
 const PROTECTED_ROUTE_HANDLERS = [
+  "src/app/api/flyers/[id]/download/route.ts",
   "src/app/api/prices/latest/route.ts",
   "src/app/api/prices/refresh/route.ts",
   "src/app/api/products/[id]/listings/route.ts",

@@ -31,6 +31,7 @@ export default async function RootLayout({
                 <div className="flex items-center gap-3 text-sm font-bold text-ink sm:gap-5">
                   <a href="/">Dashboard</a>
                   <a href="/products">Products</a>
+                  <a href="/flyers">Flyers</a>
                   <a href="/account">Account</a>
                   <form action="/auth/signout" method="post">
                     <button type="submit">Sign out</button>
