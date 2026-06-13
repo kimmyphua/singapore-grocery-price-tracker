@@ -17,6 +17,15 @@ describe("scheduled scrape workflow", () => {
   it("installs Chromium and runs the shared scheduled refresh", () => {
     expect(workflow).toContain("DIRECT_URL: ${{ secrets.DIRECT_URL }}");
     expect(workflow).toContain(
+      "NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
+    );
+    expect(workflow).toContain(
+      "SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}"
+    );
+    expect(workflow).toContain(
+      "SUPABASE_FLYER_BUCKET: ${{ secrets.SUPABASE_FLYER_BUCKET }}"
+    );
+    expect(workflow).toContain(
       "npx playwright install --with-deps chromium"
     );
     expect(workflow).toContain("npm run scrape");
@@ -26,5 +35,8 @@ describe("scheduled scrape workflow", () => {
     expect(readme).toContain("`DATABASE_URL`");
     expect(readme).toContain("`DIRECT_URL`");
     expect(readme).toContain("`SCRAPER_USER_AGENT`");
+    expect(readme).toContain("`NEXT_PUBLIC_SUPABASE_URL`");
+    expect(readme).toContain("`SUPABASE_SECRET_KEY`");
+    expect(readme).toContain("`SUPABASE_FLYER_BUCKET`");
   });
 });
