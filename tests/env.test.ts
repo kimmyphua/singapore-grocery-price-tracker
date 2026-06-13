@@ -1,20 +1,20 @@
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
-import { parseServerEnv } from "@/lib/env";
+import { parseAuthServerEnv } from "@/lib/env";
 
 describe("server environment", () => {
-  it("requires Supabase auth and legacy owner settings", () => {
-    expect(() => parseServerEnv({})).toThrow("NEXT_PUBLIC_SUPABASE_URL");
+  it("requires Supabase auth settings", () => {
+    expect(() => parseAuthServerEnv({})).toThrow(
+      "NEXT_PUBLIC_SUPABASE_URL"
+    );
     expect(
-      parseServerEnv({
+      parseAuthServerEnv({
         NEXT_PUBLIC_SUPABASE_URL: "https://axmooodckwmazabgitkv.supabase.co",
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
-        APP_ORIGIN: "https://prices.example",
-        LEGACY_OWNER_EMAIL: "owner@example.com"
+        APP_ORIGIN: "https://prices.example"
       })
     ).toMatchObject({
-      appOrigin: "https://prices.example",
-      legacyOwnerEmail: "owner@example.com"
+      appOrigin: "https://prices.example"
     });
   });
 
@@ -25,24 +25,22 @@ describe("server environment", () => {
     "ftp://prices.example"
   ])("rejects a non-canonical APP_ORIGIN: %s", (appOrigin) => {
     expect(() =>
-      parseServerEnv({
+      parseAuthServerEnv({
         NEXT_PUBLIC_SUPABASE_URL:
           "https://axmooodckwmazabgitkv.supabase.co",
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
-        APP_ORIGIN: appOrigin,
-        LEGACY_OWNER_EMAIL: "owner@example.com"
+        APP_ORIGIN: appOrigin
       })
     ).toThrow("APP_ORIGIN");
   });
 
   it("allows an HTTP localhost APP_ORIGIN for development", () => {
     expect(
-      parseServerEnv({
+      parseAuthServerEnv({
         NEXT_PUBLIC_SUPABASE_URL:
           "https://axmooodckwmazabgitkv.supabase.co",
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
-        APP_ORIGIN: "http://localhost:3000",
-        LEGACY_OWNER_EMAIL: "owner@example.com"
+        APP_ORIGIN: "http://localhost:3000"
       }).appOrigin
     ).toBe("http://localhost:3000");
   });
@@ -51,11 +49,10 @@ describe("server environment", () => {
     "rejects a non-http Supabase URL: %s",
     (supabaseUrl) => {
       expect(() =>
-        parseServerEnv({
+        parseAuthServerEnv({
           NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
-          APP_ORIGIN: "https://prices.example",
-          LEGACY_OWNER_EMAIL: "owner@example.com"
+          APP_ORIGIN: "https://prices.example"
         })
       ).toThrow("NEXT_PUBLIC_SUPABASE_URL");
     }
@@ -63,11 +60,10 @@ describe("server environment", () => {
 
   it("reports malformed Supabase URLs as structured validation errors", () => {
     expect(() =>
-      parseServerEnv({
+      parseAuthServerEnv({
         NEXT_PUBLIC_SUPABASE_URL: "not-a-url",
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
-        APP_ORIGIN: "https://prices.example",
-        LEGACY_OWNER_EMAIL: "owner@example.com"
+        APP_ORIGIN: "https://prices.example"
       })
     ).toThrow(z.ZodError);
   });

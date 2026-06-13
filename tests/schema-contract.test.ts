@@ -7,10 +7,16 @@ const migrationPath =
 const migration = existsSync(migrationPath)
   ? readFileSync(migrationPath, "utf8")
   : "";
+const cleanupMigrationPath =
+  "prisma/migrations/20260611150000_remove_canonical_products/migration.sql";
+const cleanupMigration = existsSync(cleanupMigrationPath)
+  ? readFileSync(cleanupMigrationPath, "utf8")
+  : "";
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts?: Record<string, string>;
 };
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
+const seed = readFileSync("prisma/seed.ts", "utf8");
 
 describe("multi-user schema", () => {
   it("defines private products joined to shared listings", () => {
@@ -28,7 +34,9 @@ describe("multi-user schema", () => {
     expect(schema).toContain("model TrackedProductListing");
     expect(schema).toContain("model ScrapeAttempt");
 
-    expect(schema).toMatch(/canonicalProduct\s+CanonicalProduct\?/);
+    expect(schema).not.toContain("model CanonicalProduct");
+    expect(schema).not.toMatch(/canonicalProduct\s+CanonicalProduct\?/);
+    expect(schema).not.toMatch(/canonicalProductId\s+String\?/);
     expect(
       schema.match(/trackedProductListings\s+TrackedProductListing\[\]/g),
     ).toHaveLength(2);
@@ -102,6 +110,29 @@ describe("multi-user schema", () => {
     expect(migration).not.toContain('DROP TABLE "CanonicalProduct"');
     expect(migration).not.toContain('DROP COLUMN "canonicalProductId"');
     expect(migration).not.toContain('UPDATE "RetailerListing"');
+  });
+
+  it("removes canonical products only in the post-backfill cleanup migration", () => {
+    expect(existsSync(cleanupMigrationPath)).toBe(true);
+    expect(cleanupMigration).toContain(
+      'ALTER TABLE "RetailerListing" DROP CONSTRAINT "RetailerListing_canonicalProductId_fkey";',
+    );
+    expect(cleanupMigration).toContain(
+      'DROP INDEX "RetailerListing_canonicalProductId_idx";',
+    );
+    expect(cleanupMigration).toContain(
+      'ALTER TABLE "RetailerListing" DROP COLUMN "canonicalProductId";',
+    );
+    expect(cleanupMigration).toContain('DROP TABLE "CanonicalProduct";');
+  });
+
+  it("does not recreate legacy canonical products during seeding", () => {
+    expect(seed).not.toContain("canonicalProduct");
+    expect(seed).not.toContain("const products");
+  });
+
+  it("does not expose the completed one-time legacy migration as a command", () => {
+    expect(packageJson.scripts?.["db:migrate-legacy-products"]).toBeUndefined();
   });
 
   it("enables RLS on every private table without public policies", () => {

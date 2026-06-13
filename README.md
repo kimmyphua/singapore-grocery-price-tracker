@@ -77,7 +77,6 @@ Required application and workflow configuration:
 - `SUPABASE_SECRET_KEY`
 - `SUPABASE_FLYER_BUCKET`
 - `APP_ORIGIN`
-- `LEGACY_OWNER_EMAIL` during the one-time legacy migration
 
-Keep the `flyers` Supabase Storage bucket private. Signed-in downloads are
+Keep the configured Supabase Storage bucket private. Signed-in downloads are
 issued through short-lived server-generated URLs.

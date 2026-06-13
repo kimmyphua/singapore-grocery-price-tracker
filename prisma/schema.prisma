@@ -125,54 +125,33 @@ model TrackedProduct {
   @@index([ownerId, isActive])
 }
 
-model CanonicalProduct {
-  id          String   @id @default(cuid())
-  slug        String   @unique
-  brand       String
-  family      String
-  flavour     String?
-  packCount   Int      @default(1)
-  unitSize    Float
-  unit        String
-  totalSize   Float
-  searchTerms String[]
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  listings RetailerListing[]
-}
-
 model RetailerListing {
-  id                 String      @id @default(cuid())
-  retailerId         String
-  canonicalProductId String?
-  retailerSku        String?
-  titleRaw           String
-  brandRaw           String?
-  imageUrl           String?
-  productUrl         String
-  normalizedBrand    String?
-  normalizedFamily   String?
-  normalizedFlavour  String?
-  packCount          Int?
-  unitSize           Float?
-  unit               String?
-  totalSize          Float?
-  matchStatus        MatchStatus @default(UNMATCHED)
-  matchConfidence    Float?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  id                String      @id @default(cuid())
+  retailerId        String
+  retailerSku       String?
+  titleRaw          String
+  brandRaw          String?
+  imageUrl          String?
+  productUrl        String
+  normalizedBrand   String?
+  normalizedFamily  String?
+  normalizedFlavour String?
+  packCount         Int?
+  unitSize          Float?
+  unit              String?
+  totalSize         Float?
+  matchStatus       MatchStatus @default(UNMATCHED)
+  matchConfidence   Float?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   retailer               Retailer                @relation(fields: [retailerId], references: [id])
-  canonicalProduct       CanonicalProduct?       @relation(fields: [canonicalProductId], references: [id])
   priceSnapshots         PriceSnapshot[]
   trackedProductListings TrackedProductListing[]
   scrapeAttempts         ScrapeAttempt[]
 
   @@unique([retailerId, productUrl])
   @@unique([id, retailerId])
-  @@index([canonicalProductId])
 }
 
 model TrackedProductListing {

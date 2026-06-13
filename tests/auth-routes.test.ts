@@ -176,8 +176,7 @@ describe("login request", () => {
           NEXT_PUBLIC_SUPABASE_URL:
             "https://axmooodckwmazabgitkv.supabase.co",
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable",
-          APP_ORIGIN: "https://prices.example",
-          LEGACY_OWNER_EMAIL: "owner@example.com"
+          APP_ORIGIN: "https://prices.example"
         }
       )
     ).toEqual({

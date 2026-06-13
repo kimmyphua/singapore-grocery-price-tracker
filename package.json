@@ -17,7 +17,6 @@
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:migrate-legacy-products": "tsx scripts/migrate-legacy-products.ts",
     "db:seed": "tsx prisma/seed.ts",
     "scrape": "tsx src/lib/scraping/run-scrape.ts",
     "scrape:url": "tsx src/lib/scraping/scrape-url.ts"
