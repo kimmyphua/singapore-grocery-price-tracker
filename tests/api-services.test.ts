@@ -8,10 +8,10 @@ import {
 describe("api payload helpers", () => {
   it("lists products from the database client when available", async () => {
     const payload = await listProductsPayload({
-      canonicalProduct: {
+      trackedProduct: {
         findMany: async () => [{ slug: "kitkat", brand: "KitKat" }]
       }
-    });
+    }, "owner-1");
 
     expect(payload).toEqual({
       products: [{ slug: "kitkat", brand: "KitKat" }]

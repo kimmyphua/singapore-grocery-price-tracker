@@ -1,8 +1,9 @@
-import { products } from "@/lib/data/seed-data";
-
 type ProductClient = {
-  canonicalProduct: {
-    findMany: (args?: any) => Promise<unknown[]>;
+  trackedProduct: {
+    findMany: (args: {
+      where: { ownerId: string; isActive: true };
+      orderBy: Array<{ brand?: "asc"; name?: "asc" }>;
+    }) => Promise<unknown[]>;
   };
 };
 
@@ -24,15 +25,15 @@ type ScrapeRunClient = {
   };
 };
 
-export async function listProductsPayload(client: ProductClient) {
-  try {
-    const rows = await client.canonicalProduct.findMany({
-      orderBy: [{ brand: "asc" }, { flavour: "asc" }]
-    });
-    return { products: rows };
-  } catch {
-    return { products, source: "seed-fallback" as const };
-  }
+export async function listProductsPayload(
+  client: ProductClient,
+  ownerId: string
+) {
+  const rows = await client.trackedProduct.findMany({
+    where: { ownerId, isActive: true },
+    orderBy: [{ brand: "asc" }, { name: "asc" }]
+  });
+  return { products: rows };
 }
 
 export async function listLatestPricesPayload(client: PriceClient) {

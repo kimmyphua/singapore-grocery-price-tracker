@@ -1,43 +1,17 @@
-import { prisma } from "@/lib/db";
 import type {
   LatestPrice,
   PriceHistory,
   WeeklyPriceHistoryResult,
   WeeklyPriceHistorySort
 } from "@/lib/data/seed-data";
+import {
+  getTrackedProductRows,
+  type TrackedProductQueryClient
+} from "@/lib/products/queries";
 import { calculateBestValue } from "@/lib/pricing/promotion-value";
 
-type CachedPriceRow = {
-  price: unknown;
-  originalPrice?: unknown;
-  unitPrice: unknown;
-  promotionText: string | null;
-  isAvailable: boolean;
-  capturedAt: Date | string;
-  retailerListing: {
-    productUrl: string;
-    totalSize: number | null;
-    retailer: {
-      slug: string;
-      name: string;
-    };
-    canonicalProduct: {
-      slug: string;
-      packCount: number;
-      unitSize: number;
-      totalSize: number;
-      unit: string;
-    } | null;
-  };
-};
-
-type CachedPriceClient = {
-  priceSnapshot: {
-    findMany: (args: any) => Promise<CachedPriceRow[]>;
-  };
-};
-
 type CachedPriceOptions = {
+  ownerId?: string;
   productSlug?: string;
 };
 
@@ -50,37 +24,50 @@ type WeeklyPriceHistoryOptions = CachedPriceOptions & {
   pageSize?: number;
 };
 
+type OwnedSnapshotRow = {
+  productId: string;
+  productName: string;
+  productSlug: string;
+  productTotalSize: number;
+  price: unknown;
+  originalPrice: unknown;
+  unitPrice: unknown;
+  promotionText: string | null;
+  isAvailable: boolean;
+  capturedAt: Date | string;
+  retailerListing: {
+    id: string;
+    productUrl: string;
+    totalSize: number | null;
+    retailer: {
+      slug: string;
+      name: string;
+    };
+  };
+};
+
+export type OwnedLatestPrice = LatestPrice & {
+  productId: string;
+  productName: string;
+};
+
 export async function getCachedLatestPrices(
-  client: CachedPriceClient = prisma as unknown as CachedPriceClient,
+  client?: TrackedProductQueryClient,
   options: CachedPriceOptions = {}
-): Promise<LatestPrice[]> {
+): Promise<OwnedLatestPrice[]> {
+  if (!options.ownerId) {
+    return [];
+  }
+
   try {
-    const rows = await client.priceSnapshot.findMany({
-      where: {
-        retailerListing: {
-          retailer: {
-            isActive: true
-          },
-          canonicalProduct: {
-            isActive: true,
-            ...(options.productSlug ? { slug: options.productSlug } : {})
-          }
-        }
-      },
-      orderBy: { capturedAt: "desc" },
-      take: 100,
-      include: {
-        retailerListing: {
-          include: {
-            retailer: true,
-            canonicalProduct: true
-          }
-        }
-      }
-    });
+    const products = await getTrackedProductRows(
+      client,
+      options.ownerId,
+      { productSlug: options.productSlug }
+    );
+    const rows = flattenSnapshots(products);
 
     return rows
-      .filter((row) => row.retailerListing.canonicalProduct)
       .filter(hasPositiveSnapshotPrice)
       .filter(isLatestRetailerProductRow)
       .map(mapCachedPriceRow);
@@ -90,37 +77,21 @@ export async function getCachedLatestPrices(
 }
 
 export async function getCachedWeeklyPriceHistory(
-  client: CachedPriceClient = prisma as unknown as CachedPriceClient,
+  client?: TrackedProductQueryClient,
   options: WeeklyPriceHistoryOptions = {}
 ): Promise<WeeklyPriceHistoryResult> {
-  try {
-    const rows = await client.priceSnapshot.findMany({
-      where: {
-        retailerListing: {
-          retailer: {
-            isActive: true
-          },
-          canonicalProduct: {
-            isActive: true,
-            ...(options.productSlug ? { slug: options.productSlug } : {})
-          }
-        }
-      },
-      orderBy: { capturedAt: "desc" },
-      take: 500,
-      include: {
-        retailerListing: {
-          include: {
-            retailer: true,
-            canonicalProduct: true
-          }
-        }
-      }
-    });
+  if (!options.ownerId) {
+    return paginateWeeklyHistory([], options);
+  }
 
-    const historyRows = [...rows]
-      .sort((left, right) => getTimestamp(right.capturedAt) - getTimestamp(left.capturedAt))
-      .filter((row) => row.retailerListing.canonicalProduct)
+  try {
+    const products = await getTrackedProductRows(
+      client,
+      options.ownerId,
+      { productSlug: options.productSlug }
+    );
+    const rows = flattenSnapshots(products);
+    const historyRows = rows
       .filter(hasPositiveSnapshotPrice)
       .filter(isRetailerProductChangeRow)
       .map((row) => ({
@@ -136,39 +107,74 @@ export async function getCachedWeeklyPriceHistory(
   }
 }
 
-function hasPositiveSnapshotPrice(row: CachedPriceRow) {
+function flattenSnapshots(
+  products: Awaited<ReturnType<typeof getTrackedProductRows>>
+): OwnedSnapshotRow[] {
+  return products
+    .flatMap((product) =>
+      product.listings.flatMap(({ retailerListing }) =>
+        retailerListing.retailer.isActive
+          ? retailerListing.priceSnapshots.map((snapshot) => ({
+              productId: product.id,
+              productName: product.name,
+              productSlug: product.slug,
+              productTotalSize: product.totalSize,
+              price: snapshot.price,
+              originalPrice: snapshot.originalPrice,
+              unitPrice: snapshot.unitPrice,
+              promotionText: snapshot.promotionText,
+              isAvailable: snapshot.isAvailable,
+              capturedAt: snapshot.capturedAt,
+              retailerListing: {
+                id: retailerListing.id,
+                productUrl: retailerListing.productUrl,
+                totalSize: retailerListing.totalSize,
+                retailer: {
+                  slug: retailerListing.retailer.slug,
+                  name: retailerListing.retailer.name
+                }
+              }
+            }))
+          : []
+      )
+    )
+    .sort(
+      (left, right) =>
+        getTimestamp(right.capturedAt) - getTimestamp(left.capturedAt)
+    );
+}
+
+function hasPositiveSnapshotPrice(row: OwnedSnapshotRow) {
   return toNumber(row.price) > 0;
 }
 
 function isLatestRetailerProductRow(
-  row: CachedPriceRow,
+  row: OwnedSnapshotRow,
   index: number,
-  rows: CachedPriceRow[]
+  rows: OwnedSnapshotRow[]
 ) {
-  const productSlug = row.retailerListing.canonicalProduct?.slug;
-  const retailerSlug = row.retailerListing.retailer.slug;
   return (
     rows.findIndex(
       (candidate) =>
-        candidate.retailerListing.canonicalProduct?.slug === productSlug &&
-        candidate.retailerListing.retailer.slug === retailerSlug
+        candidate.productId === row.productId &&
+        candidate.retailerListing.retailer.slug ===
+          row.retailerListing.retailer.slug
     ) === index
   );
 }
 
 function isRetailerProductChangeRow(
-  row: CachedPriceRow,
+  row: OwnedSnapshotRow,
   index: number,
-  rows: CachedPriceRow[]
+  rows: OwnedSnapshotRow[]
 ) {
-  const productSlug = row.retailerListing.canonicalProduct?.slug;
-  const retailerSlug = row.retailerListing.retailer.slug;
   const newerRow = rows
     .slice(0, index)
     .find(
       (candidate) =>
-        candidate.retailerListing.canonicalProduct?.slug === productSlug &&
-        candidate.retailerListing.retailer.slug === retailerSlug
+        candidate.productId === row.productId &&
+        candidate.retailerListing.retailer.slug ===
+          row.retailerListing.retailer.slug
     );
 
   return (
@@ -177,7 +183,7 @@ function isRetailerProductChangeRow(
   );
 }
 
-function getPriceHistorySignature(row: CachedPriceRow) {
+function getPriceHistorySignature(row: OwnedSnapshotRow) {
   return [
     toNumber(row.price).toFixed(4),
     row.originalPrice === null || row.originalPrice === undefined
@@ -192,30 +198,37 @@ function normalizePromotionText(value: string | null) {
   return value?.trim().replace(/\s+/g, " ").toLowerCase() ?? "";
 }
 
-function mapCachedPriceRow(row: CachedPriceRow): LatestPrice {
-  const product = row.retailerListing.canonicalProduct;
-  if (!product) {
-    throw new Error("Cannot map cached price without a canonical product");
-  }
-
+function mapCachedPriceRow(row: OwnedSnapshotRow): OwnedLatestPrice {
   const price = toNumber(row.price);
-  const originalPrice = row.originalPrice === null || row.originalPrice === undefined
-    ? null
-    : toNumber(row.originalPrice);
-  const totalSize = row.retailerListing.totalSize ?? product.totalSize;
-  const promotionText = row.promotionText ?? getInferredSavingsText(price, originalPrice);
+  const originalPrice =
+    row.originalPrice === null || row.originalPrice === undefined
+      ? null
+      : toNumber(row.originalPrice);
+  const totalSize =
+    row.retailerListing.totalSize ?? row.productTotalSize;
+  const promotionText =
+    row.promotionText ?? getInferredSavingsText(price, originalPrice);
   const value = calculateBestValue(price, totalSize, promotionText);
   const capturedAt =
-    row.capturedAt instanceof Date ? row.capturedAt.toISOString() : row.capturedAt;
-  const scrapeStatus = row.isAvailable ? ("available" as const) : ("unavailable" as const);
+    row.capturedAt instanceof Date
+      ? row.capturedAt.toISOString()
+      : row.capturedAt;
+  const scrapeStatus = row.isAvailable
+    ? ("available" as const)
+    : ("unavailable" as const);
 
   return {
-    productSlug: product.slug,
+    productId: row.productId,
+    productName: row.productName,
+    productSlug: row.productSlug,
     retailerSlug: row.retailerListing.retailer.slug,
     retailerName: row.retailerListing.retailer.name,
     price,
     originalPrice,
-    unitPrice: row.unitPrice === null ? null : toNumber(row.unitPrice),
+    unitPrice:
+      row.unitPrice === null || row.unitPrice === undefined
+        ? null
+        : toNumber(row.unitPrice),
     effectivePrice: value.effectivePrice,
     effectiveUnitPrice: value.effectiveUnitPrice,
     dealQuantity: value.dealQuantity,
@@ -224,13 +237,23 @@ function mapCachedPriceRow(row: CachedPriceRow): LatestPrice {
     productUrl: row.retailerListing.productUrl,
     isAvailable: row.isAvailable,
     scrapeStatus,
-    statusMessage: scrapeStatus === "unavailable" ? promotionText ?? "Unavailable" : null,
+    statusMessage:
+      scrapeStatus === "unavailable"
+        ? promotionText ?? "Unavailable"
+        : null,
     source: "cached-price-snapshot"
   };
 }
 
-function getInferredSavingsText(price: number | null, originalPrice: number | null) {
-  if (price === null || originalPrice === null || originalPrice <= price + 0.005) {
+function getInferredSavingsText(
+  price: number | null,
+  originalPrice: number | null
+) {
+  if (
+    price === null ||
+    originalPrice === null ||
+    originalPrice <= price + 0.005
+  ) {
     return null;
   }
 
@@ -241,22 +264,18 @@ function toNumber(value: unknown): number {
   if (typeof value === "number") {
     return value;
   }
-
   if (typeof value === "string") {
     return Number(value);
   }
-
   if (value && typeof value === "object" && "toNumber" in value) {
     return (value as { toNumber: () => number }).toNumber();
   }
-
   return Number(value);
 }
 
 function getSingaporeDate(value: Date | string): string {
   const date = value instanceof Date ? value : new Date(value);
   const singaporeDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-
   return singaporeDate.toISOString().slice(0, 10);
 }
 
@@ -277,7 +296,12 @@ function matchesWeeklyHistoryFilters(
     return true;
   }
 
-  return [row.retailerName, row.retailerSlug, row.promotionText ?? "", row.date]
+  return [
+    row.retailerName,
+    row.retailerSlug,
+    row.promotionText ?? "",
+    row.date
+  ]
     .join(" ")
     .toLowerCase()
     .includes(query);
@@ -305,27 +329,35 @@ function compareBySort(
   if (sort === "retailer") {
     return left.retailerName.localeCompare(right.retailerName);
   }
-
   if (sort === "shelfPrice") {
-    return compareNullableNumbers(getDisplayedOriginalPrice(left), getDisplayedOriginalPrice(right));
+    return compareNullableNumbers(
+      getDisplayedOriginalPrice(left),
+      getDisplayedOriginalPrice(right)
+    );
   }
-
   if (sort === "dealPrice") {
     return compareNullableNumbers(left.effectivePrice, right.effectivePrice);
   }
-
   if (sort === "unitValue") {
-    return compareNullableNumbers(left.effectiveUnitPrice, right.effectiveUnitPrice);
+    return compareNullableNumbers(
+      left.effectiveUnitPrice,
+      right.effectiveUnitPrice
+    );
   }
-
-  return left.date.localeCompare(right.date) || getTimestamp(left.capturedAt) - getTimestamp(right.capturedAt);
+  return (
+    left.date.localeCompare(right.date) ||
+    getTimestamp(left.capturedAt) - getTimestamp(right.capturedAt)
+  );
 }
 
 function getDisplayedOriginalPrice(row: PriceHistory) {
   return row.originalPrice ?? row.price;
 }
 
-function compareNullableNumbers(left: number | null, right: number | null) {
+function compareNullableNumbers(
+  left: number | null,
+  right: number | null
+) {
   return (left ?? Infinity) - (right ?? Infinity);
 }
 
@@ -357,6 +389,5 @@ function clampInteger(
   if (typeof value !== "number" || !Number.isInteger(value)) {
     return fallback;
   }
-
   return Math.min(Math.max(value, min), max);
 }

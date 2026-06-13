@@ -11,8 +11,9 @@ import { productPreviewSchema } from "@/lib/products/preview";
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  let session;
   try {
-    await requireAppSession();
+    session = await requireAppSession();
   } catch (error) {
     const response = appSessionErrorResponse(error);
     if (response) {
@@ -21,7 +22,9 @@ export async function GET() {
     throw error;
   }
 
-  return NextResponse.json(await listProductsPayload(prisma));
+  return NextResponse.json(
+    await listProductsPayload(prisma, session.profileId)
+  );
 }
 
 export async function POST(request: Request) {

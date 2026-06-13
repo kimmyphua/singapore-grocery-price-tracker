@@ -1,12 +1,12 @@
-import { listLatestPricesPayload } from "@/lib/api/payloads";
 import { appSessionErrorResponse } from "@/lib/auth/guards";
 import { requireAppSession } from "@/lib/auth/session";
-import { prisma } from "@/lib/db";
+import { getCachedLatestPrices } from "@/lib/pricing/cached-prices";
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  let session;
   try {
-    await requireAppSession();
+    session = await requireAppSession();
   } catch (error) {
     const response = appSessionErrorResponse(error);
     if (response) {
@@ -15,5 +15,9 @@ export async function GET() {
     throw error;
   }
 
-  return NextResponse.json(await listLatestPricesPayload(prisma));
+  return NextResponse.json({
+    prices: await getCachedLatestPrices(undefined, {
+      ownerId: session.profileId
+    })
+  });
 }
