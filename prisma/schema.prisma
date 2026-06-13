@@ -242,18 +242,19 @@ model ScrapeRun {
 }
 
 model FlyerSource {
-  id               String          @id @default(cuid())
-  key              String          @unique
-  retailerId       String
-  title            String
-  landingUrl       String
-  kind             FlyerSourceKind
-  isActive         Boolean         @default(true)
-  lastCheckedAt    DateTime?
-  lastCheckStatus  String?
-  lastErrorMessage String?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id                      String          @id @default(cuid())
+  key                     String          @unique
+  retailerId              String
+  title                   String
+  landingUrl              String
+  kind                    FlyerSourceKind
+  isActive                Boolean         @default(true)
+  lastCheckedAt           DateTime?
+  lastCheckStatus         String?
+  lastErrorMessage        String?
+  lastMetadataFingerprint String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 
   retailer Retailer       @relation(fields: [retailerId], references: [id])
   editions FlyerEdition[]

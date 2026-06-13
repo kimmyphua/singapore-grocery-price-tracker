@@ -19,6 +19,7 @@ CREATE TABLE "FlyerSource" (
     "lastCheckedAt" TIMESTAMP(3),
     "lastCheckStatus" TEXT,
     "lastErrorMessage" TEXT,
+    "lastMetadataFingerprint" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

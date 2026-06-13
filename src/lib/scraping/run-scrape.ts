@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/db";
-import { refreshScheduledListings } from "@/lib/pricing/scheduled-refresh";
+import { refreshScheduledData } from "@/lib/pricing/scheduled-refresh";
 
 async function main() {
-  const summary = await refreshScheduledListings();
+  const summary = await refreshScheduledData();
   console.log(JSON.stringify(summary));
 }
 
