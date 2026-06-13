@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleFlyerDownload } from "@/app/api/flyers/[id]/download/route";
+import { handleFlyerDownload } from "@/lib/flyers/download";
 
 describe("flyer download route", () => {
   it("rejects signed-out users", async () => {

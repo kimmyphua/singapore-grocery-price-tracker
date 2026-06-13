@@ -1,22 +1,27 @@
 # Singapore Grocery Price Tracker
 
-Next.js full-stack scaffold for comparing Singapore supermarket prices across FairPrice, Sheng Siong, Cold Storage, and RedMart. It also has a review-first weekly flyer import for snack and ice cream promotions.
-
-The initial basket tracks Magnum, Bulla, Tillamook, KitKat, and Kinder Bueno with normalization for flavour, pack size, count, weight, and unit price.
+Next.js app for privately tracking Singapore supermarket product URLs and
+comparing saved prices across FairPrice, Cold Storage, and RedMart.
 
 ## Current State
 
-This is a deployable scaffold with product-page parsing for the verified URLs in `src/lib/data/verified-product-urls.ts`. App pages read stored price snapshots for fast navigation; retailer scraping happens only through an explicit refresh operation. It is not a broad catalogue crawler yet: each retailer/product URL must be verified before it is trusted for comparison.
+Users sign in with a Supabase email magic link, add supported product URLs, and
+see only their own tracked products. Shared retailer listings are scraped once
+and reused when multiple users track the same URL.
 
-Weekly flyer promotions are handled separately from product prices. The app can fetch supermarket weekly ad PDFs/images, extract snack and ice cream candidates with local text/OCR parsing, and queue those candidates for review. Only approved promotion deals appear on `/deals`, and they never change product best-value calculations.
+The signed-in Flyers area shows the current Cold Storage grocery PDF and
+FairPrice Weekly Savers publication, plus a downloadable 12-week history.
+Flyer content is informational and never feeds `PriceSnapshot` or product
+best-value calculations.
 
 ## Stack
 
 - Next.js App Router + TypeScript
 - Tailwind CSS
 - Prisma + Postgres
+- Supabase Auth and private Storage
 - Vitest
-- GitHub Actions for CI and future scheduled scraping
+- GitHub Actions scheduled refresh
 - Vercel-ready app structure
 
 ## Local Setup
@@ -43,53 +48,36 @@ npx prisma validate
 npm run scrape
 ```
 
-Refresh stored price snapshots:
-
-```bash
-curl -X POST http://localhost:3000/api/prices/refresh \
-  -H 'content-type: application/json' \
-  -d '{}'
-```
-
-Refresh one product by passing a `productSlug` JSON field. See `docs/PRICE_REFRESH_BEHAVIOUR.md` for the read path and refresh path contract.
-
-Refresh weekly flyer promotions:
-
-```bash
-curl -X POST http://localhost:3000/api/promotions/refresh \
-  -H 'content-type: application/json' \
-  -d '{}'
-```
-
-Pass `retailerSlug` to refresh one source: `fairprice`, `giant`, `sheng-siong`, or `cold-storage`. Review imported candidates at `/admin/promotions`; approved deals appear on `/deals`. See `docs/WEEKLY_PROMOTIONS_BEHAVIOUR.md`.
+Manual product refresh is available from signed-in product pages. See
+`docs/PRICE_REFRESH_BEHAVIOUR.md` for the cached read and refresh contract.
 
 ## Scraping Notes
 
 - Scrape only public Singapore grocery pages.
 - Do not log in, bypass anti-bot controls, or scrape account/member-only prices.
 - Keep scrape frequency low and identify the app with `SCRAPER_USER_AGENT`.
-- Review fuzzy matches before linking retailer listings to canonical products.
-- Store raw retailer listings separately from canonical products.
-- Dashboard and product detail pages must read cached `PriceSnapshot` rows; they must not scrape retailer websites during normal navigation.
-- RedMart/Lazada product pages are JavaScript-rendered. The scraper prefers browser-rendered sale prices when available and falls back to verified URL price parameters only when the public page blocks headless extraction.
-- Foodpanda/Giant search pages are not trusted for price comparison because search results can silently switch to a different product when the exact item is removed. Do not store Giant prices unless a stable product-level source is verified.
-- Products marked unavailable for delivery are still stored and compared when the retailer exposes a price, because online availability can be region-specific.
-- Weekly flyer deals are informational promotions. They stay in `PromotionDeal` and must not be copied into `PriceSnapshot` unless a later feature explicitly matches and verifies them against a canonical product.
+- Record failures and retain the last valid price snapshot.
+- Store raw retailer listings separately from user-owned tracked products.
+- Dashboard and product pages read cached `PriceSnapshot` rows.
+- Foodpanda/Giant bot-protection responses are blocked scrapes, not a reason to
+  add bypass logic.
+- Flyer editions are shared source documents and never update product prices.
 
-## Deployment Notes
+## Deployment
 
-Recommended future deployment:
+The scheduled workflow runs at 12:00 AM and 12:00 PM Singapore time.
 
-- Vercel for the Next.js UI/API.
-- Hosted Postgres through Neon, Supabase, or Railway.
-- GitHub Actions for scheduled scraping using repository secrets.
-
-Required secrets for scheduled scraping:
+Required application and workflow configuration:
 
 - `DATABASE_URL`
 - `DIRECT_URL`
 - `SCRAPER_USER_AGENT`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY`
+- `SUPABASE_FLYER_BUCKET`
+- `APP_ORIGIN`
+- `LEGACY_OWNER_EMAIL` during the one-time legacy migration
 
-The scheduled workflow runs at 12:00 AM and 12:00 PM Singapore time. Enable
-production execution only after retailer selectors and all repository secrets
-are configured.
+Keep the `flyers` Supabase Storage bucket private. Signed-in downloads are
+issued through short-lived server-generated URLs.

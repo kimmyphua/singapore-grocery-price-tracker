@@ -32,8 +32,6 @@ import { AuthSessionError } from "@/lib/auth/session";
 const PROTECTED_PAGES = [
   "src/app/account/page.tsx",
   "src/app/admin/matches/page.tsx",
-  "src/app/admin/promotions/page.tsx",
-  "src/app/deals/page.tsx",
   "src/app/flyers/[id]/page.tsx",
   "src/app/flyers/page.tsx",
   "src/app/page.tsx",
@@ -51,9 +49,6 @@ const PROTECTED_ROUTE_HANDLERS = [
   "src/app/api/products/[id]/route.ts",
   "src/app/api/products/preview/route.ts",
   "src/app/api/products/route.ts",
-  "src/app/api/promotions/deals/[id]/route.ts",
-  "src/app/api/promotions/deals/bulk/route.ts",
-  "src/app/api/promotions/refresh/route.ts",
   "src/app/api/scrape-runs/route.ts"
 ];
 

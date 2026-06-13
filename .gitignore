@@ -12,6 +12,7 @@ prisma/*.db
 data/weekly-ads
 eng.traineddata
 qa-screenshots
+public/pdf.worker.min.mjs
 .vercel
 .worktrees/
 .superpowers/

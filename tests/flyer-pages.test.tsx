@@ -24,6 +24,8 @@ describe("flyer pages", () => {
     );
 
     expect(pdfViewer).toContain("pdfjs-dist");
+    expect(pdfViewer).toContain('workerSrc = "/pdf.worker.min.mjs"');
+    expect(pdfViewer).not.toContain("import.meta.url");
     expect(pdfViewer).toContain("Unable to display this PDF");
     expect(publicationViewer).toContain("Open publication");
     expect(publicationViewer).toContain("could not be embedded");

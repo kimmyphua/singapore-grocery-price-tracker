@@ -9,9 +9,6 @@ const MUTATION_ROUTES = [
   "src/app/api/products/[id]/route.ts",
   "src/app/api/products/preview/route.ts",
   "src/app/api/products/route.ts",
-  "src/app/api/promotions/deals/[id]/route.ts",
-  "src/app/api/promotions/deals/bulk/route.ts",
-  "src/app/api/promotions/refresh/route.ts",
   "src/app/api/scrape-runs/route.ts",
   "src/app/auth/signout/route.ts"
 ];
