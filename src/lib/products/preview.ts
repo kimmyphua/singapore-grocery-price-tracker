@@ -75,6 +75,7 @@ export async function previewProductUrl(
         supportedUrl
       );
     } catch (error) {
+      logPreviewFailure(supportedUrl, "scrape", error);
       if (error instanceof ProductPreviewError) {
         throw error;
       }
@@ -86,14 +87,16 @@ export async function previewProductUrl(
 
   try {
     html = await fetchPage(supportedUrl.canonicalUrl, { delayMs: 0 });
-  } catch {
+  } catch (error) {
+    logPreviewFailure(supportedUrl, "fetch", error);
     throw new ProductPreviewError("FETCH_FAILED");
   }
 
   let parsed: ParsedRetailerProduct;
   try {
     parsed = parsePage(html, supportedUrl.canonicalUrl);
-  } catch {
+  } catch (error) {
+    logPreviewFailure(supportedUrl, "parse", error, html);
     throw new ProductPreviewError("PARSE_FAILED");
   }
 
@@ -175,4 +178,19 @@ function normalizeText(value: string): string {
 function normalizeOptional(value: string | undefined): string | undefined {
   const normalized = value ? normalizeText(value) : "";
   return normalized || undefined;
+}
+
+function logPreviewFailure(
+  supportedUrl: SupportedProductUrl,
+  stage: "fetch" | "parse" | "scrape",
+  error: unknown,
+  html?: string
+) {
+  console.warn("product-preview-failed", {
+    retailer: supportedUrl.retailerSlug,
+    stage,
+    error: error instanceof Error ? error.message : "UNKNOWN",
+    htmlBytes: html ? Buffer.byteLength(html) : undefined,
+    pageTitle: html?.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim()
+  });
 }
