@@ -209,4 +209,18 @@ describe("owner-scoped product changes", () => {
       "join:product-1:listing-pending"
     ]);
   });
+
+  it("does not bypass identity checks for non-RedMart pending URLs", async () => {
+    const { store, calls } = createStore();
+
+    await expect(
+      attachPendingRetailerListing(
+        store,
+        "owner-1",
+        "product-1",
+        "https://shengsiong.com.sg/product/unrelated-product-240-g"
+      )
+    ).rejects.toMatchObject({ code: "INVALID_PRODUCT" });
+    expect(calls).toEqual([]);
+  });
 });

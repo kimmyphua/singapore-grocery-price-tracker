@@ -243,6 +243,9 @@ export async function attachPendingRetailerListing(
   } catch {
     throw new ProductMutationError("INVALID_PRODUCT");
   }
+  if (supportedUrl.retailerSlug !== "redmart") {
+    throw new ProductMutationError("INVALID_PRODUCT");
+  }
 
   await store.transaction(
     async (transaction) => {

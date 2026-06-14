@@ -274,6 +274,46 @@ describe("ProductWizard", () => {
     });
   });
 
+  it("does not queue a failed non-RedMart URL without identity confirmation", async () => {
+    const shengSiongUrl =
+      "https://shengsiong.com.sg/product/tasty-bites-fish-bean-curd-240-g";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({ error: "PARSE_FAILED" }, { status: 422 })
+      )
+    );
+
+    render(
+      <ProductWizard
+        productId="product-1"
+        productSlug="example-milk"
+        existingProduct={{
+          name: preview.name,
+          brand: preview.brand,
+          family: preview.family,
+          flavour: preview.flavour,
+          packCount: preview.packCount,
+          unitSize: preview.unitSize,
+          unit: preview.unit,
+          totalSize: preview.totalSize,
+          imageUrl: preview.imageUrl
+        }}
+      />
+    );
+    fireEvent.change(screen.getByLabelText("Product URLs"), {
+      target: { value: shengSiongUrl }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
+
+    expect(await screen.findByLabelText("Current price")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Add retailer for scheduled refresh"
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a supported error and keeps the entered URL", async () => {
     vi.stubGlobal(
       "fetch",

@@ -61,13 +61,19 @@ export function ProductWizard({
           body.error &&
           MANUAL_FALLBACK_ERRORS.has(body.error)
         ) {
-          if (productId && existingProduct) {
+          const manualPreview = buildManualRetailerPreview(
+            url,
+            existingProduct
+          );
+          if (
+            productId &&
+            existingProduct &&
+            manualPreview.retailerSlug === "redmart"
+          ) {
             nextPendingUrls.push(url);
             continue;
           }
-          nextPreviews.push(
-            buildManualRetailerPreview(url, existingProduct)
-          );
+          nextPreviews.push(manualPreview);
           nextManualEntryCount += 1;
           continue;
         }
