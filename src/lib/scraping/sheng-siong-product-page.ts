@@ -1,5 +1,4 @@
 import type { ParsedRetailerProduct } from "./product-page-types";
-import WebSocket, { type RawData } from "ws";
 
 const SHENG_SIONG_SOCKET_URL = "wss://shengsiong.com.sg/websocket";
 const SHENG_SIONG_IMAGE_BASE =
@@ -104,10 +103,16 @@ function callShengSiongProductMethod(
       settled = true;
       clearTimeout(timeout);
       callback();
-      socket.terminate();
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
     };
 
-    socket.on("open", () => {
+    socket.addEventListener("open", () => {
+      if (settled) {
+        socket.close();
+        return;
+      }
       socket.send(
         JSON.stringify({
           msg: "connect",
@@ -117,8 +122,8 @@ function callShengSiongProductMethod(
       );
     });
 
-    socket.on("message", (data) => {
-      const message = parseDdpMessage(data);
+    socket.addEventListener("message", (event) => {
+      const message = parseDdpMessage(event.data);
       if (!message) {
         return;
       }
@@ -153,15 +158,18 @@ function callShengSiongProductMethod(
       finish(() => resolve(result));
     });
 
-    socket.on("error", () => {
+    socket.addEventListener("error", () => {
       finish(() => reject(new Error("SHENG_SIONG_FETCH_FAILED")));
     });
   });
 }
 
-function parseDdpMessage(data: RawData): DdpMessage | null {
+function parseDdpMessage(data: unknown): DdpMessage | null {
+  if (typeof data !== "string") {
+    return null;
+  }
   try {
-    const parsed = JSON.parse(data.toString());
+    const parsed = JSON.parse(data);
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;

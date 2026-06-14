@@ -1,4 +1,5 @@
-import { chromium } from "playwright";
+import serverlessChromium from "@sparticuz/chromium";
+import { chromium } from "playwright-core";
 import {
   parseRedMartProductPage,
   extractRedMartPrimaryPromotionText,
@@ -26,7 +27,18 @@ type RedMartExtractionPage = {
 export async function scrapeRedMartBrowserProductPage(
   url: string
 ): Promise<ParsedRetailerProduct> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch(
+    process.env.VERCEL
+      ? {
+          args: serverlessChromium.args,
+          executablePath: await serverlessChromium.executablePath(),
+          headless: true
+        }
+      : {
+          channel: "chrome",
+          headless: true
+        }
+  );
 
   try {
     const page = await browser.newPage({ viewport: { width: 1365, height: 900 } });

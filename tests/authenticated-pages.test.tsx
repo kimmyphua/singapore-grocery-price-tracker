@@ -85,6 +85,14 @@ describe("authenticated private pages", () => {
     expect(config.regions).toEqual(["sin1"]);
   });
 
+  it("keeps serverless browser dependencies out of the Next.js webpack bundle", () => {
+    const config = readFileSync("next.config.js", "utf8");
+
+    expect(config).toContain('"@sparticuz/chromium"');
+    expect(config).toContain('"playwright-core"');
+    expect(config).toContain("serverComponentsExternalPackages");
+  });
+
   it.each(INTERNAL_NAVIGATION_FILES)(
     "%s uses client navigation for application links",
     (path) => {
