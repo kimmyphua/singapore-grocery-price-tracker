@@ -39,7 +39,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(await previewProductUrl(payload.data.url));
+    return NextResponse.json(
+      await previewProductUrl(payload.data.url, {
+        deferRedMartToScheduledRefresh: process.env.VERCEL === "1"
+      })
+    );
   } catch (error) {
     if (
       error instanceof ProductPreviewError ||

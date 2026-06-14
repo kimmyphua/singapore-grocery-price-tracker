@@ -58,6 +58,7 @@ type ProductPreviewDependencies = {
   parsePage?: (html: string, url: string) => ParsedRetailerProduct;
   scrapeRedMart?: (url: string) => Promise<ParsedRetailerProduct>;
   scrapeShengSiong?: (url: string) => Promise<ParsedRetailerProduct>;
+  deferRedMartToScheduledRefresh?: boolean;
 };
 
 export async function previewProductUrl(
@@ -73,6 +74,9 @@ export async function previewProductUrl(
     dependencies.scrapeShengSiong ?? scrapeShengSiongProductPage;
 
   if (supportedUrl.retailerSlug === "redmart") {
+    if (dependencies.deferRedMartToScheduledRefresh) {
+      throw new ProductPreviewError("PARSE_FAILED");
+    }
     try {
       return buildProductPreview(
         await scrapeRedMart(supportedUrl.canonicalUrl),

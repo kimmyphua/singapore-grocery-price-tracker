@@ -133,6 +133,21 @@ describe("buildProductPreview", () => {
     expect(fetchPage).not.toHaveBeenCalled();
   });
 
+  it("defers RedMart immediately when the interactive runtime is blocked", async () => {
+    const scrapeRedMart = vi.fn();
+
+    await expect(
+      previewProductUrl(
+        "https://www.lazada.sg/products/pdp-i301118872-s527230478.html",
+        {
+          scrapeRedMart,
+          deferRedMartToScheduledRefresh: true
+        }
+      )
+    ).rejects.toMatchObject({ code: "PARSE_FAILED" });
+    expect(scrapeRedMart).not.toHaveBeenCalled();
+  });
+
   it("uses the Sheng Siong adapter instead of fetching the shell page", async () => {
     const scrapeShengSiong = vi.fn().mockResolvedValue({
       ...parsedProduct,
