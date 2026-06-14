@@ -1,4 +1,5 @@
 import type { ParsedRetailerProduct } from "./product-page-types";
+import WebSocket, { type RawData } from "ws";
 
 const SHENG_SIONG_SOCKET_URL = "wss://shengsiong.com.sg/websocket";
 const SHENG_SIONG_IMAGE_BASE =
@@ -91,20 +92,22 @@ function callShengSiongProductMethod(
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(SHENG_SIONG_SOCKET_URL);
     const requestId = "product";
+    let settled = false;
     const timeout = setTimeout(() => {
-      closeSocket(socket);
-      reject(new Error("SHENG_SIONG_TIMEOUT"));
+      finish(() => reject(new Error("SHENG_SIONG_TIMEOUT")));
     }, REQUEST_TIMEOUT_MS);
 
-    const finish = (
-      callback: () => void
-    ) => {
+    const finish = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       clearTimeout(timeout);
-      closeSocket(socket);
       callback();
+      socket.terminate();
     };
 
-    socket.addEventListener("open", () => {
+    socket.on("open", () => {
       socket.send(
         JSON.stringify({
           msg: "connect",
@@ -114,8 +117,8 @@ function callShengSiongProductMethod(
       );
     });
 
-    socket.addEventListener("message", (event) => {
-      const message = parseDdpMessage(event.data);
+    socket.on("message", (data) => {
+      const message = parseDdpMessage(data);
       if (!message) {
         return;
       }
@@ -150,30 +153,18 @@ function callShengSiongProductMethod(
       finish(() => resolve(result));
     });
 
-    socket.addEventListener("error", () => {
+    socket.on("error", () => {
       finish(() => reject(new Error("SHENG_SIONG_FETCH_FAILED")));
     });
   });
 }
 
-function parseDdpMessage(data: unknown): DdpMessage | null {
-  if (typeof data !== "string") {
-    return null;
-  }
+function parseDdpMessage(data: RawData): DdpMessage | null {
   try {
-    const parsed = JSON.parse(data);
+    const parsed = JSON.parse(data.toString());
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
-  }
-}
-
-function closeSocket(socket: WebSocket) {
-  if (
-    socket.readyState === WebSocket.OPEN ||
-    socket.readyState === WebSocket.CONNECTING
-  ) {
-    socket.close();
   }
 }
 

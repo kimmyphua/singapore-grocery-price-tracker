@@ -34,7 +34,21 @@ export default async function EditProductPage({
           product.
         </p>
       </div>
-      <ProductWizard productId={product.id} productSlug={product.slug} />
+      <ProductWizard
+        productId={product.id}
+        productSlug={product.slug}
+        existingProduct={{
+          name: product.name,
+          brand: product.brand,
+          family: product.family,
+          flavour: product.flavour,
+          packCount: product.packCount,
+          unitSize: product.unitSize,
+          unit: product.unit,
+          totalSize: product.totalSize,
+          imageUrl: product.imageUrl
+        }}
+      />
     </div>
   );
 }

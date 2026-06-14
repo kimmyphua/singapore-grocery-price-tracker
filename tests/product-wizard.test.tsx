@@ -161,6 +161,55 @@ describe("ProductWizard", () => {
     );
   });
 
+  it("allows a manually priced Lazada listing when Vercel receives a block page", async () => {
+    const lazadaUrl =
+      "https://www.lazada.sg/products/pdp-i301118872-s527230478.html";
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({ error: "PARSE_FAILED" }, { status: 422 })
+      )
+      .mockResolvedValueOnce(Response.json({ attached: true }, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ProductWizard
+        productId="product-1"
+        productSlug="example-milk"
+        existingProduct={{
+          name: preview.name,
+          brand: preview.brand,
+          family: preview.family,
+          flavour: preview.flavour,
+          packCount: preview.packCount,
+          unitSize: preview.unitSize,
+          unit: preview.unit,
+          totalSize: preview.totalSize,
+          imageUrl: preview.imageUrl
+        }}
+      />
+    );
+    fireEvent.change(screen.getByLabelText("Product URLs"), {
+      target: { value: lazadaUrl }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
+
+    const priceInput = await screen.findByLabelText("Lazada current price");
+    fireEvent.change(priceInput, { target: { value: "12.12" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add retailer" }));
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith("/products/example-milk");
+    });
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "/api/products/product-1/listings",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"price":12.12')
+      })
+    );
+  });
+
   it("shows a supported error and keeps the entered URL", async () => {
     vi.stubGlobal(
       "fetch",

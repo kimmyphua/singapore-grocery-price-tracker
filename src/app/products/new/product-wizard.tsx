@@ -3,16 +3,22 @@
 import React, { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { ProductPreview } from "@/lib/products/preview";
+import {
+  buildManualRetailerPreview,
+  type ExistingProductDetails
+} from "@/lib/products/manual-preview";
 import { parseProductUrlList } from "@/lib/products/url-list";
 
 type ProductWizardProps = {
   productId?: string;
   productSlug?: string;
+  existingProduct?: ExistingProductDetails;
 };
 
 export function ProductWizard({
   productId,
-  productSlug
+  productSlug,
+  existingProduct
 }: ProductWizardProps) {
   const router = useRouter();
   const [urlList, setUrlList] = useState("");
@@ -47,6 +53,16 @@ export function ProductWizard({
       } & Partial<ProductPreview>;
 
       if (!response.ok) {
+        if (
+          existingProduct &&
+          body.error === "PARSE_FAILED" &&
+          isLazadaUrl(url)
+        ) {
+          nextPreviews.push(
+            buildManualRetailerPreview(url, existingProduct)
+          );
+          continue;
+        }
         setStatus("idle");
         setError(getPreviewError(body.error));
         return;
@@ -110,6 +126,18 @@ export function ProductWizard({
     setPreviews((current) =>
       current.map((item, index) =>
         index === 0 ? { ...item, [key]: value } : item
+      )
+    );
+  }
+
+  function updateRetailerPreview<Key extends keyof ProductPreview>(
+    index: number,
+    key: Key,
+    value: ProductPreview[Key]
+  ) {
+    setPreviews((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [key]: value } : item
       )
     );
   }
@@ -210,6 +238,18 @@ export function ProductWizard({
           <div className="rounded-xl bg-sage/25 p-4 text-sm text-ink">
             Current price: <strong>${preview.price.toFixed(2)}</strong>
           </div>
+          {previews.map((retailerPreview, index) =>
+            retailerPreview.price > 0 ? null : (
+              <NumberField
+                key={retailerPreview.canonicalUrl}
+                label="Lazada current price"
+                value={retailerPreview.price}
+                onChange={(value) =>
+                  updateRetailerPreview(index, "price", value)
+                }
+              />
+            )
+          )}
           <button
             type="submit"
             disabled={status === "saving"}
@@ -227,6 +267,14 @@ export function ProductWizard({
       ) : null}
     </div>
   );
+}
+
+function isLazadaUrl(value: string): boolean {
+  try {
+    return new URL(value).hostname.toLowerCase() === "www.lazada.sg";
+  } catch {
+    return false;
+  }
 }
 
 async function savePreview(endpoint: string, preview: ProductPreview) {
