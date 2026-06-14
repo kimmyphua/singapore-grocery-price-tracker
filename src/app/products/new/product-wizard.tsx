@@ -27,6 +27,7 @@ export function ProductWizard({
     "idle" | "previewing" | "saving"
   >("idle");
   const [error, setError] = useState<string | null>(null);
+  const [manualEntryCount, setManualEntryCount] = useState(0);
 
   const preview = previews[0] ?? null;
 
@@ -41,6 +42,7 @@ export function ProductWizard({
     setStatus("previewing");
     setError(null);
     const nextPreviews: ProductPreview[] = [];
+    let nextManualEntryCount = 0;
 
     for (const url of urls) {
       const response = await fetch("/api/products/preview", {
@@ -54,13 +56,13 @@ export function ProductWizard({
 
       if (!response.ok) {
         if (
-          existingProduct &&
-          body.error === "PARSE_FAILED" &&
-          isLazadaUrl(url)
+          body.error &&
+          MANUAL_FALLBACK_ERRORS.has(body.error)
         ) {
           nextPreviews.push(
             buildManualRetailerPreview(url, existingProduct)
           );
+          nextManualEntryCount += 1;
           continue;
         }
         setStatus("idle");
@@ -71,6 +73,7 @@ export function ProductWizard({
     }
 
     setPreviews(nextPreviews);
+    setManualEntryCount(nextManualEntryCount);
     setStatus("idle");
   }
 
@@ -124,9 +127,7 @@ export function ProductWizard({
     value: ProductPreview[Key]
   ) {
     setPreviews((current) =>
-      current.map((item, index) =>
-        index === 0 ? { ...item, [key]: value } : item
-      )
+      current.map((item) => ({ ...item, [key]: value }))
     );
   }
 
@@ -180,6 +181,14 @@ export function ProductWizard({
           className="rounded-xl border border-peach bg-peach/15 p-4 text-sm font-semibold text-ink"
         >
           {error}
+        </div>
+      ) : null}
+
+      {manualEntryCount > 0 ? (
+        <div className="rounded-xl border border-sage bg-sage/20 p-4 text-sm text-ink">
+          Automatic extraction was unavailable for {manualEntryCount} URL
+          {manualEntryCount === 1 ? "" : "s"}. Fill in the missing details
+          below.
         </div>
       ) : null}
 
@@ -242,7 +251,11 @@ export function ProductWizard({
             retailerPreview.price > 0 ? null : (
               <NumberField
                 key={retailerPreview.canonicalUrl}
-                label="Lazada current price"
+                label={
+                  previews.length === 1
+                    ? "Current price"
+                    : `Current price ${index + 1}`
+                }
                 value={retailerPreview.price}
                 onChange={(value) =>
                   updateRetailerPreview(index, "price", value)
@@ -269,13 +282,14 @@ export function ProductWizard({
   );
 }
 
-function isLazadaUrl(value: string): boolean {
-  try {
-    return new URL(value).hostname.toLowerCase() === "www.lazada.sg";
-  } catch {
-    return false;
-  }
-}
+const MANUAL_FALLBACK_ERRORS = new Set([
+  "FETCH_FAILED",
+  "PARSE_FAILED",
+  "MISSING_TITLE",
+  "MISSING_BRAND",
+  "INVALID_PRICE",
+  "INVALID_PACK_SIZE"
+]);
 
 async function savePreview(endpoint: string, preview: ProductPreview) {
   const response = await fetch(endpoint, {

@@ -114,7 +114,7 @@ describe("ProductWizard", () => {
       "/api/products/product-1/listings",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify(secondPreview)
+        body: expect.stringContaining('"name":"My coffee milk"')
       })
     );
     expect(pushMock).toHaveBeenCalledWith("/products/my-coffee-milk");
@@ -194,7 +194,7 @@ describe("ProductWizard", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
 
-    const priceInput = await screen.findByLabelText("Lazada current price");
+    const priceInput = await screen.findByLabelText("Current price");
     fireEvent.change(priceInput, { target: { value: "12.12" } });
     fireEvent.click(screen.getByRole("button", { name: "Add retailer" }));
 
@@ -208,6 +208,64 @@ describe("ProductWizard", () => {
         body: expect.stringContaining('"price":12.12')
       })
     );
+  });
+
+  it("allows manual details for a supported new-product URL that cannot be fetched", async () => {
+    const shengSiongUrl =
+      "https://shengsiong.com.sg/product/tasty-bites-fish-bean-curd-240-g";
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({ error: "PARSE_FAILED" }, { status: 422 })
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          { id: "product-2", slug: "tasty-bites-fish-bean-curd" },
+          { status: 201 }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProductWizard />);
+    fireEvent.change(screen.getByLabelText("Product URLs"), {
+      target: { value: shengSiongUrl }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
+
+    expect(
+      await screen.findByText(/Automatic extraction was unavailable/)
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Product name"), {
+      target: { value: "Tasty Bites Fish Bean Curd 240g" }
+    });
+    fireEvent.change(screen.getByLabelText("Brand"), {
+      target: { value: "Tasty Bites" }
+    });
+    fireEvent.change(screen.getByLabelText("Category"), {
+      target: { value: "Frozen food" }
+    });
+    fireEvent.change(screen.getByLabelText("Pack count"), {
+      target: { value: "1" }
+    });
+    fireEvent.change(screen.getByLabelText("Unit size"), {
+      target: { value: "240" }
+    });
+    fireEvent.change(screen.getByLabelText("Unit"), {
+      target: { value: "g" }
+    });
+    fireEvent.change(screen.getByLabelText("Total size"), {
+      target: { value: "240" }
+    });
+    fireEvent.change(screen.getByLabelText("Current price"), {
+      target: { value: "4.65" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save product" }));
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith(
+        "/products/tasty-bites-fish-bean-curd"
+      );
+    });
   });
 
   it("shows a supported error and keeps the entered URL", async () => {

@@ -40,12 +40,16 @@ describe("manual retailer preview", () => {
     ).toBe(0);
   });
 
-  it("rejects non-Lazada URLs", () => {
-    expect(() =>
+  it("creates an empty manual preview for another supported retailer", () => {
+    expect(
       buildManualRetailerPreview(
-        "https://coldstorage.com.sg/product/magnum-mini-almond-6s",
-        product
+        "https://shengsiong.com.sg/product/tasty-bites-fish-bean-curd-240-g"
       )
-    ).toThrow("MANUAL_FALLBACK_UNSUPPORTED");
+    ).toMatchObject({
+      retailerSlug: "sheng-siong",
+      name: "",
+      brand: "",
+      price: 0
+    });
   });
 });
