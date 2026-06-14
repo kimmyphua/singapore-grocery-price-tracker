@@ -79,6 +79,12 @@ describe("authenticated private pages", () => {
     expect(source).toContain("getCachedWeeklyPriceHistoryFromRows");
   });
 
+  it("runs server functions in Singapore near the database and retailers", () => {
+    const config = JSON.parse(readFileSync("vercel.json", "utf8"));
+
+    expect(config.regions).toEqual(["sin1"]);
+  });
+
   it.each(INTERNAL_NAVIGATION_FILES)(
     "%s uses client navigation for application links",
     (path) => {
