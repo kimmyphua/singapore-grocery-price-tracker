@@ -63,8 +63,11 @@ export const editableProductFieldsSchema = z
 type ProductRecord = ProductIdentity & {
   id: string;
   ownerId: string;
-  slug?: string;
-  name?: string;
+  name: string;
+  family: string;
+  flavour: string | null;
+  unitSize: number;
+  imageUrl: string | null;
 };
 
 type ProductCreateData = {
@@ -87,6 +90,12 @@ type ListingUpsertData = {
   preview: ProductPreview;
 };
 
+type PendingListingUpsertData = {
+  retailerId: string;
+  canonicalUrl: string;
+  product: ProductRecord;
+};
+
 export type ProductMutationStore = {
   transaction<T>(
     operation: (store: ProductMutationStore) => Promise<T>,
@@ -99,6 +108,9 @@ export type ProductMutationStore = {
   createProduct(data: ProductCreateData): Promise<ProductRecord>;
   upsertListing(
     data: ListingUpsertData
+  ): Promise<{ id: string; retailerId: string }>;
+  upsertPendingListing(
+    data: PendingListingUpsertData
   ): Promise<{ id: string; retailerId: string }>;
   createProductListing(data: {
     trackedProductId: string;
@@ -208,6 +220,52 @@ export async function attachRetailerListing(
       );
       try {
         await attachPreview(transaction, product.id, retailer.id, preview);
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          throw new ProductMutationError("DUPLICATE_RETAILER");
+        }
+        throw error;
+      }
+    },
+    { isolationLevel: "Serializable" }
+  );
+}
+
+export async function attachPendingRetailerListing(
+  store: ProductMutationStore = prismaProductMutationStore,
+  ownerId: string,
+  productId: string,
+  inputUrl: string
+): Promise<void> {
+  let supportedUrl;
+  try {
+    supportedUrl = parseSupportedProductUrl(inputUrl);
+  } catch {
+    throw new ProductMutationError("INVALID_PRODUCT");
+  }
+
+  await store.transaction(
+    async (transaction) => {
+      const product = await transaction.findOwnedProduct(productId, ownerId);
+      if (!product) {
+        throw new ProductMutationError("PRODUCT_FORBIDDEN");
+      }
+
+      const retailer = await requireRetailer(
+        transaction,
+        supportedUrl.retailerSlug
+      );
+      try {
+        const listing = await transaction.upsertPendingListing({
+          retailerId: retailer.id,
+          canonicalUrl: supportedUrl.canonicalUrl,
+          product
+        });
+        await transaction.createProductListing({
+          trackedProductId: product.id,
+          retailerListingId: listing.id,
+          retailerId: retailer.id
+        });
       } catch (error) {
         if (isUniqueConstraintError(error)) {
           throw new ProductMutationError("DUPLICATE_RETAILER");
@@ -434,6 +492,37 @@ function createPrismaStore(client: PrismaProductClient): ProductMutationStore {
         select: { id: true, retailerId: true }
       });
     },
+    upsertPendingListing({ retailerId, canonicalUrl, product }) {
+      const listingData = {
+        titleRaw: product.name,
+        brandRaw: product.brand,
+        imageUrl: product.imageUrl,
+        normalizedBrand: product.brand,
+        normalizedFamily: product.family,
+        normalizedFlavour: product.flavour,
+        packCount: product.packCount,
+        unitSize: product.unitSize,
+        unit: product.unit,
+        totalSize: product.totalSize,
+        matchStatus: "AUTO_MATCHED" as const,
+        matchConfidence: 1
+      };
+      return client.retailerListing.upsert({
+        where: {
+          retailerId_productUrl: {
+            retailerId,
+            productUrl: canonicalUrl
+          }
+        },
+        create: {
+          retailerId,
+          productUrl: canonicalUrl,
+          ...listingData
+        },
+        update: listingData,
+        select: { id: true, retailerId: true }
+      });
+    },
     async createProductListing(data) {
       await client.trackedProductListing.create({ data });
     },
@@ -464,10 +553,15 @@ function createPrismaStore(client: PrismaProductClient): ProductMutationStore {
         select: {
           id: true,
           ownerId: true,
+          name: true,
           brand: true,
+          family: true,
+          flavour: true,
           packCount: true,
+          unitSize: true,
           totalSize: true,
-          unit: true
+          unit: true,
+          imageUrl: true
         }
       });
     },

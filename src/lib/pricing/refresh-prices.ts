@@ -130,6 +130,18 @@ export async function refreshRetailerListing(
         return { listingId, status: "COMPLETED" as const };
       } catch (error) {
         const blocked = isBlockedScrape(error);
+        console.warn(
+          JSON.stringify({
+            event: "listing-refresh-failed",
+            listingId,
+            retailerSlug: listing.retailer.slug,
+            status: blocked ? "BLOCKED" : "FAILED",
+            error:
+              error instanceof Error
+                ? error.message
+                : "Unknown retailer scrape failure"
+          })
+        );
         await transaction.finishAttempt(attempt.id, {
           status: blocked ? "BLOCKED" : "FAILED",
           snapshotStored: false,

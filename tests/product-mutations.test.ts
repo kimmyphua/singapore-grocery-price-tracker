@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attachPendingRetailerListing,
   attachRetailerListing,
   createTrackedProduct,
   deleteTrackedProduct,
@@ -51,6 +52,10 @@ function createStore(overrides: Partial<ProductMutationStore> = {}) {
       calls.push(`upsertListing:${data.canonicalUrl}`);
       return { id: "listing-shared", retailerId: data.retailerId };
     },
+    async upsertPendingListing(data) {
+      calls.push(`upsertPendingListing:${data.canonicalUrl}`);
+      return { id: "listing-pending", retailerId: data.retailerId };
+    },
     async createProductListing(data) {
       calls.push(`join:${data.trackedProductId}:${data.retailerListingId}`);
     },
@@ -67,10 +72,15 @@ function createStore(overrides: Partial<ProductMutationStore> = {}) {
       return {
         id,
         ownerId,
+        name: "Magnum Mini Almond 6 x 55ml",
         brand: "Magnum",
+        family: "Ice cream",
+        flavour: "Almond",
         packCount: 6,
+        unitSize: 55,
         totalSize: 330,
-        unit: "ml"
+        unit: "ml",
+        imageUrl: null
       };
     },
     async updateOwnedProduct(id, ownerId) {
@@ -182,5 +192,21 @@ describe("owner-scoped product changes", () => {
         conflicts: [{ field: "brand" }]
       }
     });
+  });
+
+  it("attaches a pending supported URL without inventing a price snapshot", async () => {
+    const { store, calls } = createStore();
+    const url =
+      "https://www.lazada.sg/products/pdp-i301118872-s527230478.html?price=12.12";
+
+    await expect(
+      attachPendingRetailerListing(store, "owner-1", "product-1", url)
+    ).resolves.toBeUndefined();
+
+    expect(calls).toEqual([
+      "transaction:Serializable",
+      "upsertPendingListing:https://www.lazada.sg/products/pdp-i301118872-s527230478.html",
+      "join:product-1:listing-pending"
+    ]);
   });
 });

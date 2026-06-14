@@ -163,7 +163,7 @@ describe("ProductWizard", () => {
     );
   });
 
-  it("allows a manually priced Lazada listing when Vercel receives a block page", async () => {
+  it("queues a blocked Lazada listing for scheduled refresh without asking for a price", async () => {
     const lazadaUrl =
       "https://www.lazada.sg/products/pdp-i301118872-s527230478.html";
     const fetchMock = vi
@@ -196,9 +196,13 @@ describe("ProductWizard", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
 
-    const priceInput = await screen.findByLabelText("Current price");
-    fireEvent.change(priceInput, { target: { value: "12.12" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add retailer" }));
+    expect(
+      await screen.findByText(/verified price and promotion will be added/)
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Current price")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add retailer for scheduled refresh" })
+    );
 
     await waitFor(() => {
       expect(pushMock).toHaveBeenCalledWith("/products/example-milk");
@@ -207,7 +211,7 @@ describe("ProductWizard", () => {
       "/api/products/product-1/listings",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining('"price":12.12')
+        body: JSON.stringify({ url: lazadaUrl, pending: true })
       })
     );
   });

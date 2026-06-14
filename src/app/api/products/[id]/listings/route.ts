@@ -3,6 +3,7 @@ import { appSessionErrorResponse } from "@/lib/auth/guards";
 import { requireSameOrigin } from "@/lib/auth/request-security";
 import { requireAppSession } from "@/lib/auth/session";
 import {
+  attachPendingRetailerListing,
   attachRetailerListing,
   detachRetailerListing,
   productMutationErrorResponse
@@ -16,6 +17,11 @@ type RouteContext = {
 
 const detachSchema = z.object({
   retailerId: z.string().trim().min(1).max(128)
+});
+
+const pendingListingSchema = z.object({
+  url: z.string().trim().url(),
+  pending: z.literal(true)
 });
 
 export async function POST(request: Request, context: RouteContext) {
@@ -35,19 +41,36 @@ export async function POST(request: Request, context: RouteContext) {
     throw error;
   }
 
-  const payload = productPreviewSchema.safeParse(
-    await request.json().catch(() => null)
-  );
-  if (!payload.success) {
+  const body = await request.json().catch(() => null);
+  const pendingPayload = pendingListingSchema.safeParse(body);
+  const previewPayload = productPreviewSchema.safeParse(body);
+  if (!pendingPayload.success && !previewPayload.success) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 422 });
   }
 
   try {
+    if (pendingPayload.success) {
+      await attachPendingRetailerListing(
+        undefined,
+        session.profileId,
+        context.params.id,
+        pendingPayload.data.url
+      );
+      return NextResponse.json(
+        { attached: true, pendingRefresh: true },
+        { status: 201 }
+      );
+    }
+
+    if (!previewPayload.success) {
+      return NextResponse.json({ error: "INVALID_INPUT" }, { status: 422 });
+    }
+
     await attachRetailerListing(
       undefined,
       session.profileId,
       context.params.id,
-      payload.data
+      previewPayload.data
     );
     return NextResponse.json({ attached: true }, { status: 201 });
   } catch (error) {

@@ -23,6 +23,7 @@ export function ProductWizard({
   const router = useRouter();
   const [urlList, setUrlList] = useState("");
   const [previews, setPreviews] = useState<ProductPreview[]>([]);
+  const [pendingUrls, setPendingUrls] = useState<string[]>([]);
   const [status, setStatus] = useState<
     "idle" | "previewing" | "saving"
   >("idle");
@@ -42,6 +43,7 @@ export function ProductWizard({
     setStatus("previewing");
     setError(null);
     const nextPreviews: ProductPreview[] = [];
+    const nextPendingUrls: string[] = [];
     let nextManualEntryCount = 0;
 
     for (const url of urls) {
@@ -59,6 +61,10 @@ export function ProductWizard({
           body.error &&
           MANUAL_FALLBACK_ERRORS.has(body.error)
         ) {
+          if (productId && existingProduct) {
+            nextPendingUrls.push(url);
+            continue;
+          }
           nextPreviews.push(
             buildManualRetailerPreview(url, existingProduct)
           );
@@ -73,13 +79,14 @@ export function ProductWizard({
     }
 
     setPreviews(nextPreviews);
+    setPendingUrls(nextPendingUrls);
     setManualEntryCount(nextManualEntryCount);
     setStatus("idle");
   }
 
   async function saveProduct(event: FormEvent) {
     event.preventDefault();
-    if (previews.length === 0) {
+    if (previews.length === 0 && pendingUrls.length === 0) {
       return;
     }
 
@@ -111,6 +118,18 @@ export function ProductWizard({
       const response = await savePreview(
         `/api/products/${destinationProductId}/listings`,
         retailerPreview
+      );
+      if (!response.ok) {
+        setStatus("idle");
+        setError(getSaveError(response.error));
+        return;
+      }
+    }
+
+    for (const pendingUrl of pendingUrls) {
+      const response = await savePendingUrl(
+        `/api/products/${destinationProductId}/listings`,
+        pendingUrl
       );
       if (!response.ok) {
         setStatus("idle");
@@ -190,6 +209,39 @@ export function ProductWizard({
           {manualEntryCount === 1 ? "" : "s"}. Fill in the missing details
           below.
         </div>
+      ) : null}
+
+      {pendingUrls.length > 0 ? (
+        <form
+          onSubmit={saveProduct}
+          className="space-y-4 rounded-2xl border border-lilac bg-white p-5 shadow-sm"
+        >
+          <div>
+            <p className="text-sm font-bold text-ink">
+              Ready for scheduled refresh
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              The retailer blocked the live server check. The URL will be
+              saved now, and its verified price and promotion will be added by
+              the scheduled public-page refresh.
+            </p>
+            <p className="mt-2 text-sm font-semibold text-teal">
+              {pendingUrls.length} retailer URL
+              {pendingUrls.length === 1 ? "" : "s"} ready
+            </p>
+          </div>
+          <button
+            type="submit"
+            disabled={status === "saving"}
+            className="h-11 rounded-full bg-peach px-5 text-sm font-bold text-ink transition hover:brightness-95 disabled:opacity-60"
+          >
+            {status === "saving"
+              ? "Saving..."
+              : pendingUrls.length === 1
+                ? "Add retailer for scheduled refresh"
+                : "Add retailers for scheduled refresh"}
+          </button>
+        </form>
       ) : null}
 
       {preview ? (
@@ -308,6 +360,22 @@ async function savePreview(endpoint: string, preview: ProductPreview) {
     error: body.error,
     id: body.id,
     slug: body.slug
+  };
+}
+
+async function savePendingUrl(endpoint: string, url: string) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url, pending: true })
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: string;
+  };
+
+  return {
+    ok: response.ok,
+    error: body.error
   };
 }
 
