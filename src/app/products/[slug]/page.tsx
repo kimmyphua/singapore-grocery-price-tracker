@@ -3,6 +3,7 @@ import type { LatestPrice, PriceHistory, WeeklyPriceHistorySort } from "@/lib/da
 import { getCachedLatestPrices, getCachedWeeklyPriceHistory } from "@/lib/pricing/cached-prices";
 import { getTrackedProductRows } from "@/lib/products/queries";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { RefreshButton } from "@/app/refresh-button";
 import { ProductActions } from "./product-actions";
 
@@ -63,9 +64,9 @@ export default async function ProductDetailPage({
 
   return (
     <div className="space-y-6">
-      <a href="/products" className="text-sm font-medium text-teal">
+      <Link href="/products" className="text-sm font-medium text-teal">
         Back to products
-      </a>
+      </Link>
       <section className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
         <div className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-teal/10">
           <p className="text-sm font-semibold text-teal">{product.family}</p>
@@ -411,13 +412,13 @@ function HistorySortLink({
   const indicator = active ? (controls.direction === "asc" ? " ↑" : " ↓") : "";
 
   return (
-    <a
+    <Link
       href={getHistoryHref(productSlug, { ...controls, sort, direction, page: 1 })}
       className="text-left transition hover:text-teal"
     >
       {label}
       {indicator}
-    </a>
+    </Link>
   );
 }
 
@@ -443,12 +444,12 @@ function HistoryPageLink({
   }
 
   return (
-    <a
+    <Link
       href={getHistoryHref(productSlug, { ...controls, page })}
       className="rounded-md border border-teal/20 px-3 py-2 font-medium text-teal transition hover:bg-meadow/10"
     >
       {children}
-    </a>
+    </Link>
   );
 }
 

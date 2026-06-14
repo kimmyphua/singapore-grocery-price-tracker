@@ -1,11 +1,18 @@
 import { parseSupportedProductUrl } from "@/lib/products/url-policy";
 
-export async function fetchRetailerPage(url: string): Promise<string> {
+type FetchRetailerPageOptions = {
+  delayMs?: number;
+};
+
+export async function fetchRetailerPage(
+  url: string,
+  options: FetchRetailerPageOptions = {}
+): Promise<string> {
   const initial = parseSupportedProductUrl(url);
   let currentUrl = initial.canonicalUrl;
 
   for (let redirectCount = 0; redirectCount <= 2; redirectCount += 1) {
-    await delay(getDelayMs());
+    await delay(options.delayMs ?? getDelayMs());
 
     const response = await fetch(currentUrl, {
       headers: {

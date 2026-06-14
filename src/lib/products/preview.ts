@@ -9,9 +9,10 @@ import { fetchRetailerPage } from "@/lib/scraping/http";
 import { parseProductPage } from "@/lib/scraping/parse-product-page";
 import type { ParsedRetailerProduct } from "@/lib/scraping/product-page-types";
 import type { RetailerSlug } from "@/lib/scraping/types";
+import { scrapeShengSiongProductPage } from "@/lib/scraping/sheng-siong-product-page";
 
 export const productPreviewSchema = z.object({
-  retailerSlug: z.enum(["fairprice", "cold-storage", "redmart"]),
+  retailerSlug: z.enum(["fairprice", "cold-storage", "redmart", "sheng-siong"]),
   canonicalUrl: z.string().url(),
   retailerSku: z.string().min(1).optional(),
   titleRaw: z.string().trim().min(1),
@@ -49,8 +50,12 @@ export class ProductPreviewError extends Error {
 }
 
 type ProductPreviewDependencies = {
-  fetchPage?: (url: string) => Promise<string>;
+  fetchPage?: (
+    url: string,
+    options?: { delayMs?: number }
+  ) => Promise<string>;
   parsePage?: (html: string, url: string) => ParsedRetailerProduct;
+  scrapeShengSiong?: (url: string) => Promise<ParsedRetailerProduct>;
 };
 
 export async function previewProductUrl(
@@ -60,10 +65,27 @@ export async function previewProductUrl(
   const supportedUrl = parseSupportedProductUrl(input);
   const fetchPage = dependencies.fetchPage ?? fetchRetailerPage;
   const parsePage = dependencies.parsePage ?? parseProductPage;
+  const scrapeShengSiong =
+    dependencies.scrapeShengSiong ?? scrapeShengSiongProductPage;
+
+  if (supportedUrl.retailerSlug === "sheng-siong") {
+    try {
+      return buildProductPreview(
+        await scrapeShengSiong(supportedUrl.canonicalUrl),
+        supportedUrl
+      );
+    } catch (error) {
+      if (error instanceof ProductPreviewError) {
+        throw error;
+      }
+      throw new ProductPreviewError("PARSE_FAILED");
+    }
+  }
+
   let html: string;
 
   try {
-    html = await fetchPage(supportedUrl.canonicalUrl);
+    html = await fetchPage(supportedUrl.canonicalUrl, { delayMs: 0 });
   } catch {
     throw new ProductPreviewError("FETCH_FAILED");
   }

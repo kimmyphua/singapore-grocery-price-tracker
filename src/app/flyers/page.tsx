@@ -1,5 +1,6 @@
 import { requireProtectedPage } from "@/lib/auth/guards";
 import { getFlyerLibrary } from "@/lib/flyers/queries";
+import Link from "next/link";
 
 export default async function FlyersPage() {
   const { profileId } = await requireProtectedPage();
@@ -35,12 +36,12 @@ export default async function FlyersPage() {
             </h2>
             {source.currentEdition ? (
               <div className="mt-5 flex flex-wrap gap-3">
-                <a
+                <Link
                   href={`/flyers/${source.currentEdition.id}`}
                   className="rounded-full bg-peach px-5 py-2 text-sm font-bold text-ink"
                 >
                   View flyer
-                </a>
+                </Link>
                 {source.currentEdition.assetKind === "PDF" ? (
                   <a
                     href={`/api/flyers/${source.currentEdition.id}/download`}

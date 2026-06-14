@@ -12,6 +12,15 @@ type LazadaTrackingData = {
   };
 };
 
+type ProductJsonLd = {
+  "@type"?: unknown;
+  name?: unknown;
+  sku?: unknown;
+  brand?: unknown;
+  image?: unknown;
+  offers?: unknown;
+};
+
 type RedMartPromotionProduct = {
   itemId?: unknown;
   link?: unknown;
@@ -32,8 +41,10 @@ export function parseRedMartProductPage(
 ): ParsedRetailerProduct {
   const $ = cheerio.load(html);
   const trackingData = extractTrackingData(html);
+  const structuredData = extractProductJsonLd($);
   const title =
     trackingData?.pdt_name ??
+    getString(structuredData?.name) ??
     $("meta[property='og:title']").attr("content")?.replace(/\s*\|\s*Lazada Singapore$/, "");
 
   if (!title) {
@@ -41,8 +52,16 @@ export function parseRedMartProductPage(
   }
 
   const trackingPrice = parsePrice(trackingData?.pdt_price);
+  const structuredOffer = getOffer(structuredData?.offers);
+  const structuredPrice = parsePrice(getString(structuredOffer?.price));
   const queryPrice = parsePrice(getQueryParam(productUrl, "price"));
-  const price = chooseBestVisiblePrice(trackingPrice, queryPrice);
+  const price = chooseBestVisiblePrice(
+    chooseBestVisiblePrice(trackingPrice, structuredPrice),
+    queryPrice
+  );
+  const structuredImage = getImage(structuredData?.image);
+  const structuredBrand = getBrand(structuredData?.brand);
+  const structuredAvailability = getString(structuredOffer?.availability);
 
   return {
     retailerSlug: "redmart",
@@ -50,13 +69,102 @@ export function parseRedMartProductPage(
     price,
     originalPrice: getRedMartOriginalPrice(trackingPrice, price),
     productUrl,
-    imageUrl: $("meta[property='og:image']").attr("content"),
-    isAvailable: getQueryParam(productUrl, "stock") !== "0",
-    retailerSku: String(trackingData?.pdt_simplesku ?? trackingData?.pdt_sku ?? ""),
-    brandRaw: trackingData?.brand_name,
-    currency: trackingData?.core?.currencyCode ?? "SGD",
+    imageUrl:
+      $("meta[property='og:image']").attr("content") ?? structuredImage,
+    isAvailable:
+      getQueryParam(productUrl, "stock") !== "0" &&
+      !structuredAvailability?.endsWith("/OutOfStock"),
+    retailerSku: String(
+      trackingData?.pdt_simplesku ??
+        trackingData?.pdt_sku ??
+        getString(structuredData?.sku) ??
+        ""
+    ),
+    brandRaw: trackingData?.brand_name ?? structuredBrand,
+    currency:
+      trackingData?.core?.currencyCode ??
+      getString(structuredOffer?.priceCurrency) ??
+      "SGD",
     promotionText: extractRedMartPromotionText(html)
   };
+}
+
+function extractProductJsonLd(
+  $: ReturnType<typeof cheerio.load>
+): ProductJsonLd | null {
+  let product: ProductJsonLd | null = null;
+
+  $("script[type='application/ld+json']").each((_, element) => {
+    if (product) {
+      return;
+    }
+
+    const parsed = safeJsonParse($(element).text());
+    product = findProductJsonLd(parsed);
+  });
+
+  return product;
+}
+
+function findProductJsonLd(value: unknown): ProductJsonLd | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const product = findProductJsonLd(item);
+      if (product) {
+        return product;
+      }
+    }
+    return null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const type = record["@type"];
+  if (type === "Product" || (Array.isArray(type) && type.includes("Product"))) {
+    return record;
+  }
+
+  return findProductJsonLd(record["@graph"]);
+}
+
+function getOffer(value: unknown): Record<string, unknown> | null {
+  const offer = Array.isArray(value) ? value[0] : value;
+  return offer && typeof offer === "object"
+    ? (offer as Record<string, unknown>)
+    : null;
+}
+
+function getString(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  return undefined;
+}
+
+function getBrand(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    return getString((value as Record<string, unknown>).name);
+  }
+  return undefined;
+}
+
+function getImage(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return getString(value[0]);
+  }
+  return undefined;
 }
 
 function chooseBestVisiblePrice(

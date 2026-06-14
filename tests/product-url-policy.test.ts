@@ -21,6 +21,11 @@ describe("parseSupportedProductUrl", () => {
       "https://www.lazada.sg/products/pdp-i301118872-s527230478.html?price=12.96&stock=1",
       "redmart",
       "https://www.lazada.sg/products/pdp-i301118872-s527230478.html"
+    ],
+    [
+      "https://shengsiong.com.sg/product/tasty-bites-handmade-fried-fish-bean-curd-240-g?utm_source=email",
+      "sheng-siong",
+      "https://shengsiong.com.sg/product/tasty-bites-handmade-fried-fish-bean-curd-240-g"
     ]
   ] as const)(
     "accepts and canonicalizes %s",
@@ -46,7 +51,9 @@ describe("parseSupportedProductUrl", () => {
     "https://coldstorage.com.sg/product",
     "https://www.lazada.sg/catalog/?q=milk",
     "https://www.lazada.sg/products/not-a-redmart-product.html",
-    "https://redmart.lazada.sg/catalog/?q=milk"
+    "https://redmart.lazada.sg/catalog/?q=milk",
+    "https://shengsiong.com.sg/search?q=fish",
+    "https://www.shengsiong.com.sg/product/tasty-bites-handmade-fried-fish-bean-curd-240-g"
   ])("rejects unsupported URL %s", (input) => {
     expect(() => parseSupportedProductUrl(input)).toThrow(
       UnsupportedProductUrlError

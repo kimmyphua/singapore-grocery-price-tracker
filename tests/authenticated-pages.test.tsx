@@ -8,6 +8,17 @@ const OWNER_SCOPED_PAGES = [
   "src/app/account/page.tsx"
 ];
 
+const INTERNAL_NAVIGATION_FILES = [
+  "src/app/page.tsx",
+  "src/app/products/page.tsx",
+  "src/app/products/new/page.tsx",
+  "src/app/products/[slug]/page.tsx",
+  "src/app/products/[slug]/edit/page.tsx",
+  "src/app/products/[slug]/product-actions.tsx",
+  "src/app/flyers/page.tsx",
+  "src/app/flyers/[id]/page.tsx"
+];
+
 describe("authenticated private pages", () => {
   it.each(OWNER_SCOPED_PAGES)(
     "%s loads the authenticated profile at the server boundary",
@@ -33,9 +44,41 @@ describe("authenticated private pages", () => {
   it("offers signed-in navigation and local sign out", () => {
     const source = readFileSync("src/app/layout.tsx", "utf8");
 
+    expect(source).toContain('import Link from "next/link"');
     expect(source).toContain('href="/"');
     expect(source).toContain('href="/products"');
     expect(source).toContain('href="/account"');
     expect(source).toContain('action="/auth/signout"');
+    expect(source).not.toMatch(/<a href="\/(?:products|flyers|account)?"/);
   });
+
+  it("keeps the footer at the viewport bottom and shows route loading feedback", () => {
+    const layout = readFileSync("src/app/layout.tsx", "utf8");
+    const loading = readFileSync("src/app/loading.tsx", "utf8");
+
+    expect(layout).toContain("flex min-h-screen flex-col");
+    expect(layout).toContain("<main");
+    expect(layout).toContain("flex-1");
+    expect(loading).toContain('role="status"');
+    expect(loading).toContain("animate-spin");
+  });
+
+  it("does not repeat the remote session lookup in the root layout", () => {
+    const source = readFileSync("src/app/layout.tsx", "utf8");
+
+    expect(source).toContain('import { cookies } from "next/headers"');
+    expect(source).toContain("isSupabaseAuthCookie");
+    expect(source).not.toContain("requireAppSession");
+  });
+
+  it.each(INTERNAL_NAVIGATION_FILES)(
+    "%s uses client navigation for application links",
+    (path) => {
+      const source = readFileSync(path, "utf8");
+
+      expect(source).not.toMatch(
+        /<a[\s\S]{0,160}?href=(?:"\/(?!api\/)|\{`\/(?!api\/))/
+      );
+    }
+  );
 });

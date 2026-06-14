@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 
 export function ProductActions({
   productId,
@@ -27,20 +28,20 @@ export function ProductActions({
 
   if (state === "deleted") {
     return (
-      <a href="/products" className="text-sm font-bold text-ink">
+      <Link href="/products" className="text-sm font-bold text-ink">
         Product deleted. Return to products.
-      </a>
+      </Link>
     );
   }
 
   return (
     <div className="flex flex-wrap gap-3">
-      <a
+      <Link
         href={`/products/${productSlug}/edit`}
         className="inline-flex rounded-full border border-lilac px-4 py-2 text-sm font-bold text-ink"
       >
         Add retailer URL
-      </a>
+      </Link>
       <button
         type="button"
         onClick={deleteProduct}

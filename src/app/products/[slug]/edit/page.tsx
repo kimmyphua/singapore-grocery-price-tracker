@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { requireProtectedPage } from "@/lib/auth/guards";
 import { getTrackedProductRows } from "@/lib/products/queries";
 import { ProductWizard } from "../../new/product-wizard";
@@ -19,12 +20,12 @@ export default async function EditProductPage({
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
-        <a
+        <Link
           href={`/products/${product.slug}`}
           className="text-sm font-bold text-ink"
         >
           Back to {product.name}
-        </a>
+        </Link>
         <h1 className="mt-3 text-3xl font-extrabold text-ink">
           Add another retailer
         </h1>
@@ -33,7 +34,7 @@ export default async function EditProductPage({
           product.
         </p>
       </div>
-      <ProductWizard productId={product.id} />
+      <ProductWizard productId={product.id} productSlug={product.slug} />
     </div>
   );
 }

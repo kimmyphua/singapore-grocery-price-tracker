@@ -4,7 +4,7 @@ import { z } from "zod";
 const adminEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
   SUPABASE_SECRET_KEY: z.string().min(1),
-  SUPABASE_FLYER_BUCKET: z.string().trim().min(1).default("flyers")
+  SUPABASE_FLYER_BUCKET: z.string().trim().min(1).default("promotion-flyers")
 });
 
 export function getSupabaseAdminConfig() {

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildProductPreview,
-  ProductPreviewError
+  ProductPreviewError,
+  previewProductUrl
 } from "@/lib/products/preview";
+import { vi } from "vitest";
 
 const supportedUrl = {
   retailerSlug: "fairprice" as const,
@@ -81,5 +83,50 @@ describe("buildProductPreview", () => {
         supportedUrl
       )
     ).toThrow("RETAILER_MISMATCH");
+  });
+
+  it("skips the scheduled scraper delay for interactive previews", async () => {
+    const fetchPage = vi.fn().mockResolvedValue("<html></html>");
+    const parsePage = vi.fn().mockReturnValue(parsedProduct);
+
+    await previewProductUrl(supportedUrl.canonicalUrl, {
+      fetchPage,
+      parsePage
+    });
+
+    expect(fetchPage).toHaveBeenCalledWith(
+      supportedUrl.canonicalUrl,
+      { delayMs: 0 }
+    );
+  });
+
+  it("uses the Sheng Siong adapter instead of fetching the shell page", async () => {
+    const scrapeShengSiong = vi.fn().mockResolvedValue({
+      ...parsedProduct,
+      retailerSlug: "sheng-siong",
+      productUrl:
+        "https://shengsiong.com.sg/product/tasty-bites-handmade-fried-fish-bean-curd-240-g",
+      titleRaw: "Tasty Bites Handmade Fried Fish Bean curd 240 g",
+      brandRaw: "Tasty Bites",
+      price: 4.65,
+      originalPrice: 6.88,
+      size: "240 g"
+    });
+    const fetchPage = vi.fn();
+
+    await expect(
+      previewProductUrl(
+        "https://shengsiong.com.sg/product/tasty-bites-handmade-fried-fish-bean-curd-240-g",
+        { fetchPage, scrapeShengSiong }
+      )
+    ).resolves.toMatchObject({
+      retailerSlug: "sheng-siong",
+      price: 4.65,
+      originalPrice: 6.88
+    });
+    expect(scrapeShengSiong).toHaveBeenCalledWith(
+      "https://shengsiong.com.sg/product/tasty-bites-handmade-fried-fish-bean-curd-240-g"
+    );
+    expect(fetchPage).not.toHaveBeenCalled();
   });
 });

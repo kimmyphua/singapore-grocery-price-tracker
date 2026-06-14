@@ -27,6 +27,10 @@ export async function handleFlyerDownload(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const url = await dependencies.createDownloadUrl(edition.storagePath);
-  return NextResponse.redirect(url);
+  try {
+    const url = await dependencies.createDownloadUrl(edition.storagePath);
+    return NextResponse.redirect(url);
+  } catch {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 }

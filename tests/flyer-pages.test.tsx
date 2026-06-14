@@ -28,7 +28,8 @@ describe("flyer pages", () => {
     expect(pdfViewer).not.toContain("import.meta.url");
     expect(pdfViewer).toContain("Unable to display this PDF");
     expect(publicationViewer).toContain("Open publication");
-    expect(publicationViewer).toContain("could not be embedded");
+    expect(publicationViewer).toContain("opens in the official retailer viewer");
+    expect(publicationViewer).not.toContain("<iframe");
   });
 
   it("adds Flyers to signed-in navigation", () => {

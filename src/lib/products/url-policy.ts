@@ -1,7 +1,8 @@
 export type SupportedProductRetailerSlug =
   | "fairprice"
   | "cold-storage"
-  | "redmart";
+  | "redmart"
+  | "sheng-siong";
 
 export type SupportedProductUrl = {
   retailerSlug: SupportedProductRetailerSlug;
@@ -26,6 +27,10 @@ const RETAILER_URL_RULES: Readonly<Record<string, RetailerUrlRule>> = {
     retailerSlug: "redmart",
     productPath:
       /^\/products\/[a-z0-9]+(?:-[a-z0-9]+)*-i[0-9]+-s[0-9]+\.html$/i
+  },
+  "shengsiong.com.sg": {
+    retailerSlug: "sheng-siong",
+    productPath: /^\/product\/[a-z0-9]+(?:-[a-z0-9]+)*$/i
   }
 };
 

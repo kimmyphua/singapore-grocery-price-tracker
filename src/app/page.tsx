@@ -3,6 +3,7 @@ import type { LatestPrice } from "@/lib/data/seed-data";
 import { formatSingaporeDateTime } from "@/lib/format/date-time";
 import { getCachedLatestPrices } from "@/lib/pricing/cached-prices";
 import { getTrackedProductRows } from "@/lib/products/queries";
+import Link from "next/link";
 import { RefreshButton } from "./refresh-button";
 
 export const dynamic = "force-dynamic";
@@ -41,17 +42,17 @@ export default async function DashboardPage() {
             Find the best value in your regular basket
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            Compare saved prices from FairPrice, Cold Storage, and RedMart.
+            Compare saved prices from FairPrice, Cold Storage, RedMart, and Sheng Siong.
             Promotions and out-of-stock prices are included when the supermarket still shows a price.
           </p>
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-start">
             <RefreshButton />
-            <a
+            <Link
               href="/products"
               className="inline-flex h-10 items-center justify-center rounded-md border border-teal/30 px-4 text-center text-sm font-semibold text-teal transition hover:bg-teal/10"
             >
               Browse products
-            </a>
+            </Link>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -72,7 +73,7 @@ export default async function DashboardPage() {
 
         <div className="grid gap-3 md:hidden">
           {latestByProduct.map(({ product, cheapest, prices }) => (
-            <a
+            <Link
               key={product.slug}
               href={`/products/${product.slug}`}
               className="rounded-lg border border-teal/15 bg-white p-4 shadow-sm"
@@ -100,7 +101,7 @@ export default async function DashboardPage() {
               <p className="mt-3 text-xs text-slate-500">
                 {prices.length > 0 ? `${prices.length} retailer prices saved` : "Refresh to add prices"}
               </p>
-            </a>
+            </Link>
           ))}
         </div>
 
@@ -119,12 +120,12 @@ export default async function DashboardPage() {
               {latestByProduct.map(({ product, cheapest }) => (
                 <tr key={product.slug} className="border-t border-teal/10">
                   <td className="px-4 py-3">
-                    <a
+                    <Link
                       href={`/products/${product.slug}`}
                       className="font-semibold text-ink"
                     >
                       {product.name}
-                    </a>
+                    </Link>
                     <div className="text-xs text-slate-500">
                       {formatPack(product)}
                     </div>

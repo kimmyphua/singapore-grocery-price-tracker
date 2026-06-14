@@ -1,126 +1,147 @@
 "use client";
 
 import React, { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type { ProductPreview } from "@/lib/products/preview";
+import { parseProductUrlList } from "@/lib/products/url-list";
 
 type ProductWizardProps = {
   productId?: string;
+  productSlug?: string;
 };
 
-export function ProductWizard({ productId }: ProductWizardProps) {
-  const [url, setUrl] = useState("");
-  const [preview, setPreview] = useState<ProductPreview | null>(null);
+export function ProductWizard({
+  productId,
+  productSlug
+}: ProductWizardProps) {
+  const router = useRouter();
+  const [urlList, setUrlList] = useState("");
+  const [previews, setPreviews] = useState<ProductPreview[]>([]);
   const [status, setStatus] = useState<
-    "idle" | "previewing" | "saving" | "saved"
+    "idle" | "previewing" | "saving"
   >("idle");
   const [error, setError] = useState<string | null>(null);
 
-  async function previewUrl(event: FormEvent) {
+  const preview = previews[0] ?? null;
+
+  async function previewUrls(event: FormEvent) {
     event.preventDefault();
-    setStatus("previewing");
-    setError(null);
-
-    const response = await fetch("/api/products/preview", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url })
-    });
-    const body = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    } & Partial<ProductPreview>;
-
-    if (!response.ok) {
-      setStatus("idle");
-      setError(getPreviewError(body.error));
+    const urls = parseProductUrlList(urlList);
+    if (urls.length === 0) {
+      setError("Add at least one product URL.");
       return;
     }
 
-    setPreview(body as ProductPreview);
+    setStatus("previewing");
+    setError(null);
+    const nextPreviews: ProductPreview[] = [];
+
+    for (const url of urls) {
+      const response = await fetch("/api/products/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url })
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      } & Partial<ProductPreview>;
+
+      if (!response.ok) {
+        setStatus("idle");
+        setError(getPreviewError(body.error));
+        return;
+      }
+      nextPreviews.push(body as ProductPreview);
+    }
+
+    setPreviews(nextPreviews);
     setStatus("idle");
   }
 
   async function saveProduct(event: FormEvent) {
     event.preventDefault();
-    if (!preview) {
+    if (previews.length === 0) {
       return;
     }
 
     setStatus("saving");
     setError(null);
-    const endpoint = productId
-      ? `/api/products/${productId}/listings`
-      : "/api/products";
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(preview)
-    });
-    const body = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
+    let destinationProductId = productId;
+    let destinationProductSlug = productSlug;
+    let remainingPreviews = previews;
 
-    if (!response.ok) {
+    if (!destinationProductId) {
+      const response = await savePreview("/api/products", previews[0]);
+      if (!response.ok) {
+        setStatus("idle");
+        setError(getSaveError(response.error));
+        return;
+      }
+      destinationProductId = response.id;
+      destinationProductSlug = response.slug;
+      remainingPreviews = previews.slice(1);
+    }
+
+    if (!destinationProductId || !destinationProductSlug) {
       setStatus("idle");
-      setError(getSaveError(body.error));
+      setError("The product was saved without a usable destination.");
       return;
     }
 
-    setStatus("saved");
+    for (const retailerPreview of remainingPreviews) {
+      const response = await savePreview(
+        `/api/products/${destinationProductId}/listings`,
+        retailerPreview
+      );
+      if (!response.ok) {
+        setStatus("idle");
+        setError(getSaveError(response.error));
+        return;
+      }
+    }
+
+    router.push(`/products/${destinationProductSlug}`);
   }
 
   function updatePreview<Key extends keyof ProductPreview>(
     key: Key,
     value: ProductPreview[Key]
   ) {
-    setPreview((current) =>
-      current ? { ...current, [key]: value } : current
-    );
-  }
-
-  if (status === "saved") {
-    return (
-      <div className="rounded-2xl border border-sage bg-sage/30 p-5">
-        <p className="font-bold text-ink">
-          {productId ? "Retailer added." : "Product saved."}
-        </p>
-        <a
-          href={productId ? "/products" : "/products"}
-          className="mt-3 inline-flex rounded-full bg-peach px-4 py-2 text-sm font-bold text-ink"
-        >
-          View products
-        </a>
-      </div>
+    setPreviews((current) =>
+      current.map((item, index) =>
+        index === 0 ? { ...item, [key]: value } : item
+      )
     );
   }
 
   return (
     <div className="space-y-5">
       <form
-        onSubmit={previewUrl}
+        onSubmit={previewUrls}
         className="rounded-2xl border border-sage bg-white p-5 shadow-sm"
       >
-        <label htmlFor="product-url" className="text-sm font-bold text-ink">
-          Product URL
+        <label htmlFor="product-urls" className="text-sm font-bold text-ink">
+          Product URLs
         </label>
         <p className="mt-1 text-sm text-slate-600">
-          Paste a public FairPrice, Cold Storage, or RedMart product page.
+          Paste one public supermarket product page per line.
         </p>
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-          <input
-            id="product-url"
-            type="url"
+        <div className="mt-3 space-y-3">
+          <textarea
+            id="product-urls"
             required
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            className="h-11 flex-1 rounded-xl border border-sage px-3 outline-none focus:ring-4 focus:ring-lilac/50"
-            placeholder="https://..."
+            rows={4}
+            value={urlList}
+            onChange={(event) => setUrlList(event.target.value)}
+            className="w-full rounded-xl border border-sage px-3 py-2 outline-none focus:ring-4 focus:ring-lilac/50"
+            placeholder={"https://...\nhttps://..."}
           />
           <button
             type="submit"
             disabled={status === "previewing"}
             className="h-11 rounded-full bg-peach px-5 text-sm font-bold text-ink transition hover:brightness-95 disabled:opacity-60"
           >
-            {status === "previewing" ? "Checking..." : "Preview product"}
+            {status === "previewing" ? "Checking..." : "Preview products"}
           </button>
         </div>
       </form>
@@ -143,6 +164,9 @@ export function ProductWizard({ productId }: ProductWizardProps) {
             <p className="text-sm font-bold text-ink">Confirm product details</p>
             <p className="mt-1 text-sm text-slate-600">
               Check the extracted information before saving.
+            </p>
+            <p className="mt-2 text-sm font-semibold text-teal">
+              {previews.length} retailer URL{previews.length === 1 ? "" : "s"} ready
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -194,13 +218,35 @@ export function ProductWizard({ productId }: ProductWizardProps) {
             {status === "saving"
               ? "Saving..."
               : productId
-                ? "Add retailer"
+                ? previews.length === 1
+                  ? "Add retailer"
+                  : "Add retailers"
                 : "Save product"}
           </button>
         </form>
       ) : null}
     </div>
   );
+}
+
+async function savePreview(endpoint: string, preview: ProductPreview) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(preview)
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    id?: string;
+    slug?: string;
+  };
+
+  return {
+    ok: response.ok,
+    error: body.error,
+    id: body.id,
+    slug: body.slug
+  };
 }
 
 function TextField({
@@ -261,7 +307,7 @@ function NumberField({
 
 function getPreviewError(code: string | undefined): string {
   if (code === "UNSUPPORTED_URL") {
-    return "That URL is not a supported FairPrice, Cold Storage, or RedMart product page.";
+    return "That URL is not a supported supermarket product page.";
   }
   if (code === "INVALID_PACK_SIZE") {
     return "The product size could not be read. Try another product URL.";

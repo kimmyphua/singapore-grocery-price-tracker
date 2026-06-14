@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { requireProtectedPage } from "@/lib/auth/guards";
 import { getFlyerEdition } from "@/lib/flyers/queries";
 import { PdfViewer } from "../pdf-viewer";
@@ -20,9 +21,9 @@ export default async function FlyerEditionPage({
   return (
     <div className="space-y-5">
       <div>
-        <a href="/flyers" className="text-sm font-bold text-coral">
+        <Link href="/flyers" className="text-sm font-bold text-coral">
           Back to flyers
-        </a>
+        </Link>
         <p className="mt-4 text-sm font-bold text-slate-500">
           {edition.source.retailer.name}
         </p>

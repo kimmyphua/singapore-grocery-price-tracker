@@ -42,4 +42,19 @@ describe("flyer download route", () => {
 
     expect(response.status).toBe(404);
   });
+
+  it("returns not found when the stored PDF object is missing", async () => {
+    const response = await handleFlyerDownload("edition-1", {
+      requireSession: vi.fn().mockResolvedValue({ profileId: "profile-1" }),
+      findEdition: vi.fn().mockResolvedValue({
+        assetKind: "PDF",
+        storagePath: "cold/missing.pdf"
+      }),
+      createDownloadUrl: vi
+        .fn()
+        .mockRejectedValue(new Error("Flyer signed URL failed: Object not found"))
+    });
+
+    expect(response.status).toBe(404);
+  });
 });

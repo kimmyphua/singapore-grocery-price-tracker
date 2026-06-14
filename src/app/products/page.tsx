@@ -1,5 +1,6 @@
 import { requireProtectedPage } from "@/lib/auth/guards";
 import { getTrackedProductRows } from "@/lib/products/queries";
+import Link from "next/link";
 
 export default async function ProductsPage() {
   const { profileId } = await requireProtectedPage();
@@ -16,12 +17,12 @@ export default async function ProductsPage() {
             Your private list can contain up to 20 products.
           </p>
         </div>
-        <a
+        <Link
           href="/products/new"
           className="inline-flex h-11 items-center justify-center rounded-full bg-peach px-5 text-sm font-bold text-ink"
         >
           Add product
-        </a>
+        </Link>
       </div>
 
       {products.length === 0 ? (
@@ -32,17 +33,17 @@ export default async function ProductsPage() {
           <p className="mt-2 text-sm text-slate-600">
             Paste a supermarket product URL and check the extracted details.
           </p>
-          <a
+          <Link
             href="/products/new"
             className="mt-4 inline-flex rounded-full bg-peach px-5 py-2 text-sm font-bold text-ink"
           >
             Track your first product
-          </a>
+          </Link>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {products.map((product) => (
-            <a
+            <Link
               key={product.id}
               href={`/products/${product.slug}`}
               className="rounded-2xl border border-sage bg-white p-5 shadow-sm transition hover:border-peach"
@@ -63,7 +64,7 @@ export default async function ProductsPage() {
                   </span>
                 ))}
               </div>
-            </a>
+            </Link>
           ))}
         </div>
       )}

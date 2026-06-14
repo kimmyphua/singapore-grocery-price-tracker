@@ -1,6 +1,11 @@
 import { z } from "zod";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseAuthServerEnv } from "@/lib/env";
+import { getSupabaseAdminConfig } from "@/lib/supabase/admin";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("server environment", () => {
   it("requires Supabase auth settings", () => {
@@ -66,5 +71,17 @@ describe("server environment", () => {
         APP_ORIGIN: "https://prices.example"
       })
     ).toThrow(z.ZodError);
+  });
+
+  it("uses the scheduled upload bucket when no flyer bucket override is set", () => {
+    vi.stubEnv(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "https://axmooodckwmazabgitkv.supabase.co"
+    );
+    vi.stubEnv("SUPABASE_SECRET_KEY", "secret");
+    vi.stubEnv("SUPABASE_FLYER_BUCKET", "");
+    delete process.env.SUPABASE_FLYER_BUCKET;
+
+    expect(getSupabaseAdminConfig().flyerBucket).toBe("promotion-flyers");
   });
 });
