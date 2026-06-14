@@ -9,6 +9,8 @@ import {
 import { UnsupportedProductUrlError } from "@/lib/products/url-policy";
 import { NextResponse } from "next/server";
 
+export const preferredRegion = "sin1";
+
 const requestSchema = z.object({
   url: z.string().trim().min(1).max(2048)
 });

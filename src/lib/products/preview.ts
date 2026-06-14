@@ -9,6 +9,7 @@ import { fetchRetailerPage } from "@/lib/scraping/http";
 import { parseProductPage } from "@/lib/scraping/parse-product-page";
 import type { ParsedRetailerProduct } from "@/lib/scraping/product-page-types";
 import type { RetailerSlug } from "@/lib/scraping/types";
+import { scrapeRedMartBrowserProductPage } from "@/lib/scraping/redmart-browser-page";
 import { scrapeShengSiongProductPage } from "@/lib/scraping/sheng-siong-product-page";
 
 export const productPreviewSchema = z.object({
@@ -55,6 +56,7 @@ type ProductPreviewDependencies = {
     options?: { delayMs?: number }
   ) => Promise<string>;
   parsePage?: (html: string, url: string) => ParsedRetailerProduct;
+  scrapeRedMart?: (url: string) => Promise<ParsedRetailerProduct>;
   scrapeShengSiong?: (url: string) => Promise<ParsedRetailerProduct>;
 };
 
@@ -65,8 +67,25 @@ export async function previewProductUrl(
   const supportedUrl = parseSupportedProductUrl(input);
   const fetchPage = dependencies.fetchPage ?? fetchRetailerPage;
   const parsePage = dependencies.parsePage ?? parseProductPage;
+  const scrapeRedMart =
+    dependencies.scrapeRedMart ?? scrapeRedMartBrowserProductPage;
   const scrapeShengSiong =
     dependencies.scrapeShengSiong ?? scrapeShengSiongProductPage;
+
+  if (supportedUrl.retailerSlug === "redmart") {
+    try {
+      return buildProductPreview(
+        await scrapeRedMart(supportedUrl.canonicalUrl),
+        supportedUrl
+      );
+    } catch (error) {
+      logPreviewFailure(supportedUrl, "scrape", error);
+      if (error instanceof ProductPreviewError) {
+        throw error;
+      }
+      throw new ProductPreviewError("PARSE_FAILED");
+    }
+  }
 
   if (supportedUrl.retailerSlug === "sheng-siong") {
     try {

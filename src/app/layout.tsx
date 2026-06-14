@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Nunito } from "next/font/google";
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { NavigationFeedback } from "./navigation-feedback";
 import "./globals.css";
 
 const nunito = Nunito({ subsets: ["latin"], display: "swap" });
@@ -11,6 +12,8 @@ export const metadata: Metadata = {
   title: "Singapore Grocery Price Tracker",
   description: "Compare Singapore supermarket prices for recurring grocery items."
 };
+
+export const preferredRegion = "sin1";
 
 export default async function RootLayout({
   children
@@ -24,6 +27,9 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={nunito.className}>
+        <Suspense fallback={null}>
+          <NavigationFeedback />
+        </Suspense>
         <div className="flex min-h-screen flex-col bg-mist">
           <header className="border-b border-sage bg-white/90">
             <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-5">

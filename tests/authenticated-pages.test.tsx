@@ -71,6 +71,14 @@ describe("authenticated private pages", () => {
     expect(source).not.toContain("requireAppSession");
   });
 
+  it("loads product detail snapshots once and derives both price views locally", () => {
+    const source = readFileSync("src/app/products/[slug]/page.tsx", "utf8");
+
+    expect(source.match(/getTrackedProductRows\(/g)).toHaveLength(1);
+    expect(source).toContain("getCachedLatestPricesFromRows");
+    expect(source).toContain("getCachedWeeklyPriceHistoryFromRows");
+  });
+
   it.each(INTERNAL_NAVIGATION_FILES)(
     "%s uses client navigation for application links",
     (path) => {

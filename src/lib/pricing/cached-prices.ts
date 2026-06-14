@@ -6,7 +6,8 @@ import type {
 } from "@/lib/data/seed-data";
 import {
   getTrackedProductRows,
-  type TrackedProductQueryClient
+  type TrackedProductQueryClient,
+  type TrackedProductQueryRow
 } from "@/lib/products/queries";
 import { calculateBestValue } from "@/lib/pricing/promotion-value";
 
@@ -65,15 +66,19 @@ export async function getCachedLatestPrices(
       options.ownerId,
       { productSlug: options.productSlug }
     );
-    const rows = flattenSnapshots(products);
-
-    return rows
-      .filter(hasPositiveSnapshotPrice)
-      .filter(isLatestRetailerProductRow)
-      .map(mapCachedPriceRow);
+    return getCachedLatestPricesFromRows(products);
   } catch {
     return [];
   }
+}
+
+export function getCachedLatestPricesFromRows(
+  products: TrackedProductQueryRow[]
+): OwnedLatestPrice[] {
+  return flattenSnapshots(products)
+    .filter(hasPositiveSnapshotPrice)
+    .filter(isLatestRetailerProductRow)
+    .map(mapCachedPriceRow);
 }
 
 export async function getCachedWeeklyPriceHistory(
@@ -90,25 +95,31 @@ export async function getCachedWeeklyPriceHistory(
       options.ownerId,
       { productSlug: options.productSlug }
     );
-    const rows = flattenSnapshots(products);
-    const historyRows = rows
-      .filter(hasPositiveSnapshotPrice)
-      .filter(isRetailerProductChangeRow)
-      .map((row) => ({
-        ...mapCachedPriceRow(row),
-        date: getSingaporeDate(row.capturedAt)
-      }))
-      .filter((row) => matchesWeeklyHistoryFilters(row, options))
-      .sort((left, right) => compareWeeklyHistoryRows(left, right, options));
-
-    return paginateWeeklyHistory(historyRows, options);
+    return getCachedWeeklyPriceHistoryFromRows(products, options);
   } catch {
     return paginateWeeklyHistory([], options);
   }
 }
 
+export function getCachedWeeklyPriceHistoryFromRows(
+  products: TrackedProductQueryRow[],
+  options: WeeklyPriceHistoryOptions = {}
+): WeeklyPriceHistoryResult {
+  const historyRows = flattenSnapshots(products)
+    .filter(hasPositiveSnapshotPrice)
+    .filter(isRetailerProductChangeRow)
+    .map((row) => ({
+      ...mapCachedPriceRow(row),
+      date: getSingaporeDate(row.capturedAt)
+    }))
+    .filter((row) => matchesWeeklyHistoryFilters(row, options))
+    .sort((left, right) => compareWeeklyHistoryRows(left, right, options));
+
+  return paginateWeeklyHistory(historyRows, options);
+}
+
 function flattenSnapshots(
-  products: Awaited<ReturnType<typeof getTrackedProductRows>>
+  products: TrackedProductQueryRow[]
 ): OwnedSnapshotRow[] {
   return products
     .flatMap((product) =>

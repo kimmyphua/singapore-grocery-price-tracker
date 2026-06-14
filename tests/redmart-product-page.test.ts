@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractRedMartRenderedPrice,
   extractRedMartRenderedSize,
+  extractRedMartPrimaryPromotionText,
   extractRedMartPromotionText,
   extractRedMartPromotionTextFromApiPayload,
   parseRedMartProductPage
@@ -113,10 +114,23 @@ describe("RedMart/Lazada product page parser", () => {
         Promotions
         Spend $45.00 + free gift
         Spend $45 + Free Gift
+        Any 2 For $27.50
         Any 3 Save 38%
         Any 3 Save 38%
       `)
-    ).toBe("Any 3 Save 38%; Spend $45.00 + free gift");
+    ).toBe("Any 2 For $27.50; Any 3 Save 38%; Spend $45.00 + free gift");
+  });
+
+  it("ignores promotions for other products below the main RedMart offer", () => {
+    expect(
+      extractRedMartPrimaryPromotionText(`
+        Promotions
+        Spend $45.00 + free gift
+        Sold by
+        RedMart
+        Any 2 Save 18%
+      `)
+    ).toBe("Spend $45.00 + free gift");
   });
 
   it("extracts matching RedMart promotions from multibuy API payloads", () => {

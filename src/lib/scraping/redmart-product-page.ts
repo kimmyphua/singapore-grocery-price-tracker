@@ -221,6 +221,7 @@ function getQueryParam(url: string, key: string): string | null {
 
 export function extractRedMartPromotionText(htmlOrText: string): string | undefined {
   const promos = [
+    ...htmlOrText.matchAll(/Any\s+\d+\s+(?:For|@|At)\s+\$?\d+(?:\.\d+)?/gi),
     ...htmlOrText.matchAll(/Any\s+\d+\s+Save\s+\$\d+(?:\.\d+)?/gi),
     ...htmlOrText.matchAll(/Any\s+\d+\s+Save\s+\d+(?:\.\d+)?%/gi),
     ...htmlOrText.matchAll(/Spend\s+\$?\d+(?:\.\d+)?\s+\+\s+free gift/gi)
@@ -228,6 +229,15 @@ export function extractRedMartPromotionText(htmlOrText: string): string | undefi
   const uniquePromos = [...new Set(promos)];
 
   return uniquePromos.length > 0 ? uniquePromos.join("; ") : undefined;
+}
+
+export function extractRedMartPrimaryPromotionText(
+  pageText: string
+): string | undefined {
+  const primaryOffer = pageText.match(/Promotions\s+([\s\S]*?)\s+Sold by/i)?.[1];
+  return primaryOffer
+    ? extractRedMartPromotionText(primaryOffer)
+    : extractRedMartPromotionText(pageText);
 }
 
 export function extractRedMartPromotionTextFromApiPayload(

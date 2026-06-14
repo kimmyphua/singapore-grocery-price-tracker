@@ -1,11 +1,15 @@
 import { requireProtectedPage } from "@/lib/auth/guards";
 import type { LatestPrice, PriceHistory, WeeklyPriceHistorySort } from "@/lib/data/seed-data";
-import { getCachedLatestPrices, getCachedWeeklyPriceHistory } from "@/lib/pricing/cached-prices";
+import {
+  getCachedLatestPricesFromRows,
+  getCachedWeeklyPriceHistoryFromRows
+} from "@/lib/pricing/cached-prices";
 import { getTrackedProductRows } from "@/lib/products/queries";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { RefreshButton } from "@/app/refresh-button";
 import { ProductActions } from "./product-actions";
+import { ListingActions } from "./listing-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +29,10 @@ export default async function ProductDetailPage({
   searchParams?: ProductDetailSearchParams;
 }) {
   const { profileId } = await requireProtectedPage();
-  const [product] = await getTrackedProductRows(undefined, profileId, {
+  const products = await getTrackedProductRows(undefined, profileId, {
     productSlug: params.slug
   });
+  const [product] = products;
   if (!product) {
     notFound();
   }
@@ -39,22 +44,15 @@ export default async function ProductDetailPage({
     searchParams,
     retailers.map((retailer) => retailer.slug)
   );
-  const [prices, priceHistory] = await Promise.all([
-    getCachedLatestPrices(undefined, {
-      ownerId: profileId,
-      productSlug: product.slug
-    }),
-    getCachedWeeklyPriceHistory(undefined, {
-      ownerId: profileId,
-      productSlug: product.slug,
+  const prices = getCachedLatestPricesFromRows(products);
+  const priceHistory = getCachedWeeklyPriceHistoryFromRows(products, {
       retailerSlug: historyControls.retailerSlug,
       query: historyControls.query,
       sort: historyControls.sort,
       direction: historyControls.direction,
       page: historyControls.page,
       pageSize: historyControls.pageSize
-    })
-  ]);
+    });
   const sortedPrices = [...prices].sort(
     (left, right) =>
       (left.effectiveUnitPrice ?? Infinity) - (right.effectiveUnitPrice ?? Infinity) ||
@@ -110,6 +108,31 @@ export default async function ProductDetailPage({
             </p>
           </div>
           <RefreshButton trackedProductId={product.id} />
+        </div>
+        <div className="border-b border-teal/10 px-4 py-4">
+          <h3 className="text-sm font-semibold text-ink">Tracked retailer URLs</h3>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {product.listings.map(({ retailerListing }) => (
+              <div
+                key={retailerListing.id}
+                className="rounded-md border border-teal/15 bg-mist/40 p-3"
+              >
+                <a
+                  href={retailerListing.productUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-semibold text-ink hover:text-teal"
+                >
+                  {retailerListing.retailer.name}
+                </a>
+                <ListingActions
+                  productId={product.id}
+                  retailerId={retailerListing.retailer.id}
+                  retailerName={retailerListing.retailer.name}
+                />
+              </div>
+            ))}
+          </div>
         </div>
         {sortedPrices.length === 0 ? (
           <p className="px-4 py-5 text-sm text-slate-600">

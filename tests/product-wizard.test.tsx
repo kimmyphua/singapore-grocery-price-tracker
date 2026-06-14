@@ -12,13 +12,15 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProductWizard } from "@/app/products/new/product-wizard";
 import { ProductActions } from "@/app/products/[slug]/product-actions";
+import { ListingActions } from "@/app/products/[slug]/listing-actions";
 
-const { pushMock } = vi.hoisted(() => ({
-  pushMock: vi.fn()
+const { pushMock, refreshMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  refreshMock: vi.fn()
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock })
+  useRouter: () => ({ push: pushMock, refresh: refreshMock })
 }));
 
 const preview = {
@@ -323,6 +325,46 @@ describe("ProductActions", () => {
         "/api/products/product-1",
         expect.objectContaining({ method: "DELETE" })
       );
+    });
+  });
+});
+
+describe("ListingActions", () => {
+  afterEach(() => {
+    cleanup();
+    refreshMock.mockReset();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("removes one retailer listing and refreshes the product page", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ detached: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <ListingActions
+        productId="product-1"
+        retailerId="retailer-redmart"
+        retailerName="RedMart"
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove RedMart URL" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/products/product-1/listings",
+        expect.objectContaining({
+          method: "DELETE",
+          body: JSON.stringify({ retailerId: "retailer-redmart" })
+        })
+      );
+      expect(refreshMock).toHaveBeenCalled();
     });
   });
 });

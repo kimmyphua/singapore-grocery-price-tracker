@@ -100,6 +100,39 @@ describe("buildProductPreview", () => {
     );
   });
 
+  it("uses the browser scraper for RedMart live prices and promotions", async () => {
+    const fetchPage = vi.fn();
+    const scrapeRedMart = vi.fn().mockResolvedValue({
+      retailerSlug: "redmart",
+      titleRaw: "Magnum Mini Almond Multipack Ice Cream 6 x 55ml - Frozen",
+      price: 7.55,
+      originalPrice: 12.12,
+      productUrl:
+        "https://www.lazada.sg/products/pdp-i301118872-s527230478.html",
+      isAvailable: true,
+      retailerSku: "527230478",
+      brandRaw: "Magnum",
+      currency: "SGD",
+      promotionText: "Spend $45.00 + free gift"
+    });
+
+    await expect(
+      previewProductUrl(
+        "https://www.lazada.sg/products/pdp-i301118872-s527230478.html",
+        { fetchPage, scrapeRedMart }
+      )
+    ).resolves.toMatchObject({
+      price: 7.55,
+      originalPrice: 12.12,
+      promotionText: "Spend $45.00 + free gift"
+    });
+
+    expect(scrapeRedMart).toHaveBeenCalledWith(
+      "https://www.lazada.sg/products/pdp-i301118872-s527230478.html"
+    );
+    expect(fetchPage).not.toHaveBeenCalled();
+  });
+
   it("uses the Sheng Siong adapter instead of fetching the shell page", async () => {
     const scrapeShengSiong = vi.fn().mockResolvedValue({
       ...parsedProduct,

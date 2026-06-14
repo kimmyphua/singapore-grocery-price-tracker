@@ -5,6 +5,8 @@ import { requireAppSession } from "@/lib/auth/session";
 import { requireSameOrigin } from "@/lib/auth/request-security";
 import { NextResponse } from "next/server";
 
+export const preferredRegion = "sin1";
+
 const requestSchema = z.object({
   trackedProductId: z.string().trim().min(1).optional()
 });
