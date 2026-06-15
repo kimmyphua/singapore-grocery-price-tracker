@@ -50,7 +50,7 @@ describe("ProductWizard", () => {
     vi.unstubAllGlobals();
   });
 
-  it("previews multiple URLs, saves the product and listings, then navigates", async () => {
+  it("saves one URL and only then offers to add another retailer", async () => {
     const secondPreview = {
       ...preview,
       retailerSlug: "cold-storage",
@@ -67,37 +67,29 @@ describe("ProductWizard", () => {
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify(secondPreview), {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        })
-      )
-      .mockResolvedValueOnce(
         new Response(JSON.stringify({ id: "product-1", slug: "my-coffee-milk" }), {
           status: 201,
           headers: { "content-type": "application/json" }
         })
       )
+      .mockResolvedValueOnce(Response.json(secondPreview))
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ attached: true }), {
-          status: 201,
-          headers: { "content-type": "application/json" }
-        })
+        Response.json({ attached: true }, { status: 201 })
       );
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ProductWizard />);
-    fireEvent.change(screen.getByLabelText("Product URLs"), {
-      target: {
-        value: `${preview.canonicalUrl}\n${secondPreview.canonicalUrl}`
-      }
+    expect(
+      screen.queryByRole("button", { name: "Add another retailer" })
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Product URL"), {
+      target: { value: preview.canonicalUrl }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview product" }));
 
     expect(await screen.findByLabelText("Product name")).toHaveValue(
       "Example Milk 1L"
     );
-    expect(screen.getByText("2 retailer URLs ready")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Product name"), {
       target: { value: "My coffee milk" }
     });
@@ -112,54 +104,78 @@ describe("ProductWizard", () => {
         })
       );
     });
+    expect(
+      screen.getByRole("button", { name: "Add another retailer" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View product" })
+    ).toBeInTheDocument();
+    expect(pushMock).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add another retailer" })
+    );
+    expect(screen.getByLabelText("Product URL")).toHaveValue("");
+
+    fireEvent.change(screen.getByLabelText("Product URL"), {
+      target: { value: secondPreview.canonicalUrl }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview product" }));
+    await screen.findByText("Current price:", { exact: false });
+    fireEvent.click(screen.getByRole("button", { name: "Add retailer" }));
+
+    await screen.findByText("Retailer added.");
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/products/product-1/listings",
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining('"name":"My coffee milk"')
+        body: expect.stringContaining(secondPreview.canonicalUrl)
       })
     );
-    expect(pushMock).toHaveBeenCalledWith("/products/my-coffee-milk");
   });
 
-  it("attaches multiple retailer URLs and returns to the product detail page", async () => {
-    const secondPreview = {
-      ...preview,
-      retailerSlug: "cold-storage",
-      canonicalUrl: "https://coldstorage.com.sg/product/example-milk-1l"
-    };
+  it("warns about a different product and saves only after explicit confirmation", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json(preview))
-      .mockResolvedValueOnce(Response.json(secondPreview))
-      .mockResolvedValueOnce(Response.json({ attached: true }, { status: 201 }))
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            error: "IDENTITY_MISMATCH",
+            conflicts: [{ field: "unitSize" }]
+          },
+          { status: 422 }
+        )
+      )
       .mockResolvedValueOnce(Response.json({ attached: true }, { status: 201 }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(
       <ProductWizard productId="product-1" productSlug="example-milk" />
     );
-    fireEvent.change(screen.getByLabelText("Product URLs"), {
-      target: {
-        value: `${preview.canonicalUrl}\n${secondPreview.canonicalUrl}`
-      }
+    fireEvent.change(screen.getByLabelText("Product URL"), {
+      target: { value: preview.canonicalUrl }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
-    await screen.findByText("2 retailer URLs ready");
-    fireEvent.click(screen.getByRole("button", { name: "Add retailers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview product" }));
+    await screen.findByLabelText("Product name");
+    fireEvent.click(screen.getByRole("button", { name: "Add retailer" }));
 
-    await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith("/products/example-milk");
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      "/api/products/product-1/listings",
-      expect.objectContaining({ method: "POST" })
+    expect(
+      await screen.findByText(
+        /may be named or sized differently from the saved product/
+      )
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add retailer anyway" })
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
+
+    await screen.findByText("Retailer added.");
+    expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/products/product-1/listings",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"allowIdentityMismatch":true')
+      })
     );
   });
 
@@ -191,10 +207,10 @@ describe("ProductWizard", () => {
         }}
       />
     );
-    fireEvent.change(screen.getByLabelText("Product URLs"), {
+    fireEvent.change(screen.getByLabelText("Product URL"), {
       target: { value: lazadaUrl }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview product" }));
 
     expect(
       await screen.findByText(/verified price and promotion will be added/)
@@ -204,9 +220,7 @@ describe("ProductWizard", () => {
       screen.getByRole("button", { name: "Add retailer for scheduled refresh" })
     );
 
-    await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith("/products/example-milk");
-    });
+    await screen.findByText("Retailer added.");
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/products/product-1/listings",
       expect.objectContaining({
@@ -233,10 +247,10 @@ describe("ProductWizard", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ProductWizard />);
-    fireEvent.change(screen.getByLabelText("Product URLs"), {
+    fireEvent.change(screen.getByLabelText("Product URL"), {
       target: { value: shengSiongUrl }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview product" }));
 
     expect(
       await screen.findByText(/Automatic extraction was unavailable/)
@@ -267,11 +281,7 @@ describe("ProductWizard", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save product" }));
 
-    await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith(
-        "/products/tasty-bites-fish-bean-curd"
-      );
-    });
+    await screen.findByText("Product saved.");
   });
 
   it("does not queue a failed non-RedMart URL without identity confirmation", async () => {
@@ -301,10 +311,10 @@ describe("ProductWizard", () => {
         }}
       />
     );
-    fireEvent.change(screen.getByLabelText("Product URLs"), {
+    fireEvent.change(screen.getByLabelText("Product URL"), {
       target: { value: shengSiongUrl }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview product" }));
 
     expect(await screen.findByLabelText("Current price")).toBeInTheDocument();
     expect(
@@ -326,11 +336,11 @@ describe("ProductWizard", () => {
     );
 
     render(<ProductWizard />);
-    const input = screen.getByLabelText("Product URLs");
+    const input = screen.getByLabelText("Product URL");
     fireEvent.change(input, {
       target: { value: "https://example.com/product/1" }
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview products" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview product" }));
 
     expect(
       await screen.findByText(
@@ -338,6 +348,30 @@ describe("ProductWizard", () => {
       )
     ).toBeInTheDocument();
     expect(input).toHaveValue("https://example.com/product/1");
+  });
+
+  it("shows a clear duplicate product error", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(preview))
+      .mockResolvedValueOnce(
+        Response.json({ error: "DUPLICATE_PRODUCT" }, { status: 409 })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ProductWizard />);
+    fireEvent.change(screen.getByLabelText("Product URL"), {
+      target: { value: preview.canonicalUrl }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Preview product" }));
+    await screen.findByLabelText("Product name");
+    fireEvent.click(screen.getByRole("button", { name: "Save product" }));
+
+    expect(
+      await screen.findByText(
+        "You are already tracking this product. Open it from Products to add another retailer."
+      )
+    ).toBeInTheDocument();
   });
 });
 

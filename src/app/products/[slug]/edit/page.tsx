@@ -30,8 +30,8 @@ export default async function EditProductPage({
           Add another retailer
         </h1>
         <p className="mt-2 text-slate-600">
-          The new listing must match the brand and package size of this
-          product.
+          We will warn you if the listing looks different, but you can still
+          add it after reviewing the details.
         </p>
       </div>
       <ProductWizard

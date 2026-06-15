@@ -196,7 +196,8 @@ export async function attachRetailerListing(
   store: ProductMutationStore = prismaProductMutationStore,
   ownerId: string,
   productId: string,
-  preview: ProductPreview
+  preview: ProductPreview,
+  options: { allowIdentityMismatch?: boolean } = {}
 ): Promise<void> {
   validateProductFields(preview);
 
@@ -208,7 +209,7 @@ export async function attachRetailerListing(
       }
 
       const identity = compareProductIdentity(product, preview);
-      if (!identity.compatible) {
+      if (!identity.compatible && !options.allowIdentityMismatch) {
         throw new ProductMutationError("IDENTITY_MISMATCH", {
           conflicts: identity.conflicts
         });

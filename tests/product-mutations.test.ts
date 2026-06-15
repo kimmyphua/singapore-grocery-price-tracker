@@ -194,6 +194,31 @@ describe("owner-scoped product changes", () => {
     });
   });
 
+  it("attaches a conflicting listing after explicit user confirmation", async () => {
+    const { store, calls } = createStore();
+
+    await expect(
+      attachRetailerListing(
+        store,
+        "owner-1",
+        "product-1",
+        {
+          ...preview,
+          brand: "Bulla"
+        },
+        { allowIdentityMismatch: true }
+      )
+    ).resolves.toBeUndefined();
+
+    expect(calls).toEqual([
+      "transaction:Serializable",
+      `upsertListing:${preview.canonicalUrl}`,
+      "join:product-1:listing-shared",
+      "snapshot:listing-shared:9.9",
+      "attempt:listing-shared"
+    ]);
+  });
+
   it("attaches a pending supported URL without inventing a price snapshot", async () => {
     const { store, calls } = createStore();
     const url =

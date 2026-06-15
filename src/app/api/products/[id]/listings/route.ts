@@ -24,6 +24,10 @@ const pendingListingSchema = z.object({
   pending: z.literal(true)
 });
 
+const retailerListingSchema = productPreviewSchema.extend({
+  allowIdentityMismatch: z.boolean().optional()
+});
+
 export async function POST(request: Request, context: RouteContext) {
   const originError = requireSameOrigin(request);
   if (originError) {
@@ -43,7 +47,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   const body = await request.json().catch(() => null);
   const pendingPayload = pendingListingSchema.safeParse(body);
-  const previewPayload = productPreviewSchema.safeParse(body);
+  const previewPayload = retailerListingSchema.safeParse(body);
   if (!pendingPayload.success && !previewPayload.success) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 422 });
   }
@@ -70,7 +74,11 @@ export async function POST(request: Request, context: RouteContext) {
       undefined,
       session.profileId,
       context.params.id,
-      previewPayload.data
+      previewPayload.data,
+      {
+        allowIdentityMismatch:
+          previewPayload.data.allowIdentityMismatch === true
+      }
     );
     return NextResponse.json({ attached: true }, { status: 201 });
   } catch (error) {

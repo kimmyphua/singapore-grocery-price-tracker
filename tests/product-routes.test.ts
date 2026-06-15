@@ -8,6 +8,7 @@ describe("product mutation route errors", () => {
   it.each([
     ["PRODUCT_FORBIDDEN", 403],
     ["PRODUCT_LIMIT_REACHED", 409],
+    ["DUPLICATE_PRODUCT", 409],
     ["DUPLICATE_RETAILER", 409],
     ["INVALID_PRODUCT", 422],
     ["IDENTITY_MISMATCH", 422],

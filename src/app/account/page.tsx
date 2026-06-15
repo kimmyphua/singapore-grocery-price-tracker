@@ -1,4 +1,5 @@
 import { requireProtectedPage } from "@/lib/auth/guards";
+import { PasswordForm } from "./password-form";
 
 export default async function AccountPage() {
   const { profileId, email } = await requireProtectedPage();
@@ -15,6 +16,7 @@ export default async function AccountPage() {
         <p className="text-sm text-slate-500">Signed in as</p>
         <p className="mt-1 font-bold text-ink">{email}</p>
         <p className="sr-only">{profileId}</p>
+        <PasswordForm />
         <form action="/auth/signout" method="post" className="mt-5">
           <button
             type="submit"

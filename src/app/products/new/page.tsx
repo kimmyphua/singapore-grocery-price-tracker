@@ -16,7 +16,7 @@ export default async function NewProductPage() {
           Track a product
         </h1>
         <p className="mt-2 text-slate-600">
-          Add one or more retailer URLs for the same product.
+          Start with one retailer URL. You can add another after saving it.
         </p>
       </div>
       <ProductWizard />
