@@ -133,19 +133,47 @@ describe("buildProductPreview", () => {
     expect(fetchPage).not.toHaveBeenCalled();
   });
 
-  it("defers RedMart immediately when the interactive runtime is blocked", async () => {
-    const scrapeRedMart = vi.fn();
+  it("attempts RedMart previews in the interactive runtime", async () => {
+    const scrapeRedMart = vi.fn().mockResolvedValue({
+      retailerSlug: "redmart",
+      titleRaw: "Bulla Creamy Classic Vanilla 2L - Frozen",
+      price: 12.96,
+      originalPrice: 15.84,
+      productUrl:
+        "https://www.lazada.sg/products/pdp-i3646264233-s24103165302.html",
+      imageUrl: "https://example.com/bulla.webp",
+      isAvailable: true,
+      retailerSku: "24103165302",
+      brandRaw: "Bulla",
+      currency: "SGD",
+      size: "2 L"
+    });
 
     await expect(
       previewProductUrl(
-        "https://www.lazada.sg/products/pdp-i301118872-s527230478.html",
-        {
-          scrapeRedMart,
-          deferRedMartToScheduledRefresh: true
-        }
+        "https://www.lazada.sg/products/pdp-i3646264233-s24103165302.html",
+        { scrapeRedMart }
+      )
+    ).resolves.toMatchObject({
+      retailerSlug: "redmart",
+      price: 12.96,
+      brand: "Bulla",
+      totalSize: 2
+    });
+    expect(scrapeRedMart).toHaveBeenCalledOnce();
+  });
+
+  it("bounds an interactive RedMart preview", async () => {
+    const scrapeRedMart = vi.fn(
+      () => new Promise<never>(() => undefined)
+    );
+
+    await expect(
+      previewProductUrl(
+        "https://www.lazada.sg/products/pdp-i3646264233-s24103165302.html",
+        { scrapeRedMart, redMartTimeoutMs: 1 }
       )
     ).rejects.toMatchObject({ code: "PARSE_FAILED" });
-    expect(scrapeRedMart).not.toHaveBeenCalled();
   });
 
   it("uses the Sheng Siong adapter instead of fetching the shell page", async () => {

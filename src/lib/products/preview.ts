@@ -58,7 +58,7 @@ type ProductPreviewDependencies = {
   parsePage?: (html: string, url: string) => ParsedRetailerProduct;
   scrapeRedMart?: (url: string) => Promise<ParsedRetailerProduct>;
   scrapeShengSiong?: (url: string) => Promise<ParsedRetailerProduct>;
-  deferRedMartToScheduledRefresh?: boolean;
+  redMartTimeoutMs?: number;
 };
 
 export async function previewProductUrl(
@@ -74,12 +74,12 @@ export async function previewProductUrl(
     dependencies.scrapeShengSiong ?? scrapeShengSiongProductPage;
 
   if (supportedUrl.retailerSlug === "redmart") {
-    if (dependencies.deferRedMartToScheduledRefresh) {
-      throw new ProductPreviewError("PARSE_FAILED");
-    }
     try {
       return buildProductPreview(
-        await scrapeRedMart(supportedUrl.canonicalUrl),
+        await withTimeout(
+          scrapeRedMart(supportedUrl.canonicalUrl),
+          dependencies.redMartTimeoutMs ?? 50_000
+        ),
         supportedUrl
       );
     } catch (error) {
@@ -203,6 +203,26 @@ function normalizeOptional(value: string | undefined): string | undefined {
   return normalized || undefined;
 }
 
+async function withTimeout<T>(operation: Promise<T>, timeoutMs: number) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("PREVIEW_TIMEOUT")),
+          timeoutMs
+        );
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 function logPreviewFailure(
   supportedUrl: SupportedProductUrl,
   stage: "fetch" | "parse" | "scrape",
@@ -212,8 +232,23 @@ function logPreviewFailure(
   console.warn("product-preview-failed", {
     retailer: supportedUrl.retailerSlug,
     stage,
-    error: error instanceof Error ? error.message : "UNKNOWN",
+    errorCategory: classifyPreviewFailure(error),
     htmlBytes: html ? Buffer.byteLength(html) : undefined,
     pageTitle: html?.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim()
   });
+}
+
+function classifyPreviewFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "PREVIEW_TIMEOUT") {
+    return "TIMEOUT";
+  }
+  if (
+    /\b(?:403|429)\b|captcha|access denied|blocked|bot protection/i.test(
+      message
+    )
+  ) {
+    return "BLOCKED";
+  }
+  return "FAILED";
 }

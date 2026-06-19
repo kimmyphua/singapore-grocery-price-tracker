@@ -10,6 +10,7 @@ import { UnsupportedProductUrlError } from "@/lib/products/url-policy";
 import { NextResponse } from "next/server";
 
 export const preferredRegion = "sin1";
+export const maxDuration = 60;
 
 const requestSchema = z.object({
   url: z.string().trim().min(1).max(2048)
@@ -39,11 +40,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(
-      await previewProductUrl(payload.data.url, {
-        deferRedMartToScheduledRefresh: process.env.VERCEL === "1"
-      })
-    );
+    return NextResponse.json(await previewProductUrl(payload.data.url));
   } catch (error) {
     if (
       error instanceof ProductPreviewError ||
