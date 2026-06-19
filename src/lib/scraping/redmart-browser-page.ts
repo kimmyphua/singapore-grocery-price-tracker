@@ -61,7 +61,7 @@ export async function scrapeRedMartBrowserProductPage(
 
     const html = await page.content();
     const bodyText = await page.locator("body").innerText({ timeout: 10000 });
-    const product = parseRedMartProductPage(html, url);
+    const product = parseRedMartProductPage(html, url, bodyText);
     const browserPromotionText = extractRedMartPrimaryPromotionText(bodyText);
     const apiPromotionText = extractRedMartPromotionTextFromApiPayload(promotionPayloads, product);
 

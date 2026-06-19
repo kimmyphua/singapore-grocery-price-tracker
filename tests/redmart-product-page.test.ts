@@ -89,6 +89,38 @@ describe("RedMart/Lazada product page parser", () => {
     });
   });
 
+  it("uses rendered product details when structured metadata is absent", () => {
+    const renderedText = `
+Groceries\tFrozen\tIce Cream\tPints\tThe Ice Cream & Cookie Co. Mint Chocolate Artisanal Gelato - 473ML(Frozen)
+The Ice Cream & Cookie Co. Mint Chocolate Artisanal Gelato - 473ML(Frozen)
+Ratings 450
+Brand:The Ice Cream & Cookie Co.More Frozen from The Ice Cream & Cookie Co.
+
+Pack Size
+
+473 ml
+
+$13.95
+Promotions
+Any 2 For $25.10
+`;
+
+    expect(
+      parseRedMartProductPage(
+        "<html><body></body></html>",
+        "https://www.lazada.sg/products/pdp-i303316841-s536686006.html?price=13.95&stock=1",
+        renderedText
+      )
+    ).toMatchObject({
+      titleRaw:
+        "The Ice Cream & Cookie Co. Mint Chocolate Artisanal Gelato - 473ML(Frozen)",
+      brandRaw: "The Ice Cream & Cookie Co.",
+      retailerSku: "536686006",
+      price: 13.95,
+      size: "473 ml"
+    });
+  });
+
   it("treats zero Lazada prices as missing instead of a real price", () => {
     const html = `
       <script>

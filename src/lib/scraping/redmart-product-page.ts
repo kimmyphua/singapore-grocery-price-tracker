@@ -37,7 +37,8 @@ type RedMartPromotionTarget = {
 
 export function parseRedMartProductPage(
   html: string,
-  productUrl: string
+  productUrl: string,
+  renderedText = ""
 ): ParsedRetailerProduct {
   const $ = cheerio.load(html);
   const trackingData = extractTrackingData(html);
@@ -45,7 +46,8 @@ export function parseRedMartProductPage(
   const title =
     trackingData?.pdt_name ??
     getString(structuredData?.name) ??
-    $("meta[property='og:title']").attr("content")?.replace(/\s*\|\s*Lazada Singapore$/, "");
+    $("meta[property='og:title']").attr("content")?.replace(/\s*\|\s*Lazada Singapore$/, "") ??
+    extractRenderedProductTitle(renderedText);
 
   if (!title) {
     throw new Error("RedMart/Lazada product data was not found");
@@ -78,15 +80,34 @@ export function parseRedMartProductPage(
       trackingData?.pdt_simplesku ??
         trackingData?.pdt_sku ??
         getString(structuredData?.sku) ??
+        extractSkuFromProductUrl(productUrl) ??
         ""
     ),
-    brandRaw: trackingData?.brand_name ?? structuredBrand,
+    brandRaw:
+      trackingData?.brand_name ??
+      structuredBrand ??
+      extractRenderedBrand(renderedText),
     currency:
       trackingData?.core?.currencyCode ??
       getString(structuredOffer?.priceCurrency) ??
       "SGD",
-    promotionText: extractRedMartPromotionText(html)
+    promotionText: extractRedMartPromotionText(html),
+    size: extractRedMartRenderedSize(renderedText)
   };
+}
+
+function extractRenderedProductTitle(renderedText: string) {
+  return renderedText.match(/\n([^\n]+)\nRatings\s+\d+/i)?.[1]?.trim();
+}
+
+function extractRenderedBrand(renderedText: string) {
+  return renderedText
+    .match(/\bBrand:\s*([^\n]+?)(?:More\s+[^\n]+)?(?:\n|$)/i)?.[1]
+    ?.trim();
+}
+
+function extractSkuFromProductUrl(productUrl: string) {
+  return new URL(productUrl).pathname.match(/-s(\d+)\.html$/i)?.[1];
 }
 
 function extractProductJsonLd(
