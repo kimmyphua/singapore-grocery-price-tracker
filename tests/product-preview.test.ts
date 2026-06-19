@@ -133,6 +133,22 @@ describe("buildProductPreview", () => {
     expect(fetchPage).not.toHaveBeenCalled();
   });
 
+  it("preserves validated RedMart query parameters while scraping", async () => {
+    const canonicalUrl =
+      "https://www.lazada.sg/products/pdp-i301118872-s527230478.html";
+    const input = `${canonicalUrl}?priceCompare=skuId%3A527230478&price=13.95`;
+    const scrapeRedMart = vi.fn().mockResolvedValue({
+      ...parsedProduct,
+      retailerSlug: "redmart",
+      productUrl: canonicalUrl
+    });
+
+    const preview = await previewProductUrl(input, { scrapeRedMart });
+
+    expect(scrapeRedMart).toHaveBeenCalledWith(input);
+    expect(preview.canonicalUrl).toBe(canonicalUrl);
+  });
+
   it("attempts RedMart previews in the interactive runtime", async () => {
     const scrapeRedMart = vi.fn().mockResolvedValue({
       retailerSlug: "redmart",

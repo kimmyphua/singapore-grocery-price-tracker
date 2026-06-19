@@ -77,7 +77,7 @@ export async function previewProductUrl(
     try {
       return buildProductPreview(
         await withTimeout(
-          scrapeRedMart(supportedUrl.canonicalUrl),
+          scrapeRedMart(input),
           dependencies.redMartTimeoutMs ?? 50_000
         ),
         supportedUrl
