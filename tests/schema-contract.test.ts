@@ -12,6 +12,11 @@ const cleanupMigrationPath =
 const cleanupMigration = existsSync(cleanupMigrationPath)
   ? readFileSync(cleanupMigrationPath, "utf8")
   : "";
+const redMartMigrationPath =
+  "prisma/migrations/20260620120000_add_redmart_refresh_jobs/migration.sql";
+const redMartMigration = existsSync(redMartMigrationPath)
+  ? readFileSync(redMartMigrationPath, "utf8")
+  : "";
 const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
   scripts?: Record<string, string>;
 };
@@ -19,6 +24,34 @@ const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
 const seed = readFileSync("prisma/seed.ts", "utf8");
 
 describe("multi-user schema", () => {
+  it("defines durable RedMart refresh jobs", () => {
+    expect(schema).toContain("enum RedMartRefreshStatus");
+    expect(schema).toContain("model RedMartRefreshJob");
+    expect(schema).toMatch(/activeKey\s+String\?\s+@unique/);
+    expect(schema).toMatch(/attemptCount\s+Int\s+@default\(0\)/);
+    expect(schema).toMatch(/leaseExpiresAt\s+DateTime\?/);
+    expect(schema).toContain("@@index([status, createdAt])");
+    expect(schema).toContain("@@index([listingId, createdAt])");
+    expect(
+      schema.match(/redMartRefreshJobs\s+RedMartRefreshJob\[\]/g),
+    ).toHaveLength(2);
+
+    expect(existsSync(redMartMigrationPath)).toBe(true);
+    expect(redMartMigration).toContain(
+      'CREATE TYPE "RedMartRefreshStatus" AS ENUM',
+    );
+    expect(redMartMigration).toContain(
+      'CREATE TABLE "RedMartRefreshJob"',
+    );
+    expect(redMartMigration).toContain(
+      'CREATE UNIQUE INDEX "RedMartRefreshJob_activeKey_key"',
+    );
+    expect(redMartMigration).toContain(
+      'ALTER TABLE "RedMartRefreshJob" ENABLE ROW LEVEL SECURITY;',
+    );
+    expect(redMartMigration).not.toMatch(/\bCREATE\s+POLICY\b/i);
+  });
+
   it("defines private products joined to shared listings", () => {
     expect(schema).toContain("enum AppSessionDuration");
     expect(schema).toContain("enum ScrapeTrigger");

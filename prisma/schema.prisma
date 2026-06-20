@@ -49,6 +49,13 @@ enum ScrapeAttemptStatus {
   BLOCKED
 }
 
+enum RedMartRefreshStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Retailer {
   id        String   @id @default(cuid())
   slug      String   @unique
@@ -73,6 +80,7 @@ model UserProfile {
   updatedAt      DateTime         @updatedAt
   products       TrackedProduct[]
   sessions       AppSession[]
+  redMartRefreshJobs RedMartRefreshJob[]
 }
 
 model LoginIntent {
@@ -149,9 +157,32 @@ model RetailerListing {
   priceSnapshots         PriceSnapshot[]
   trackedProductListings TrackedProductListing[]
   scrapeAttempts         ScrapeAttempt[]
+  redMartRefreshJobs     RedMartRefreshJob[]
 
   @@unique([retailerId, productUrl])
   @@unique([id, retailerId])
+}
+
+model RedMartRefreshJob {
+  id              String               @id @default(cuid())
+  listingId       String
+  requestedById   String
+  status          RedMartRefreshStatus @default(PENDING)
+  activeKey       String?              @unique
+  attemptCount    Int                  @default(0)
+  leaseExpiresAt  DateTime?
+  failureCategory String?
+  failureMessage  String?
+  createdAt       DateTime             @default(now())
+  claimedAt       DateTime?
+  completedAt     DateTime?
+  updatedAt       DateTime             @updatedAt
+
+  listing     RetailerListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  requestedBy UserProfile     @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([listingId, createdAt])
 }
 
 model TrackedProductListing {

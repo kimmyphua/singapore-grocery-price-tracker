@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseAuthServerEnv } from "@/lib/env";
+import { parseAuthServerEnv, parseRedMartServerEnv } from "@/lib/env";
 import { getSupabaseAdminConfig } from "@/lib/supabase/admin";
 
 afterEach(() => {
@@ -8,6 +8,29 @@ afterEach(() => {
 });
 
 describe("server environment", () => {
+  it("normalizes RedMart admin emails and requires a strong collector token", () => {
+    expect(
+      parseRedMartServerEnv({
+        ADMIN_EMAILS:
+          " KimberlyPhuaWeyHan@gmail.com,admin@example.com,ADMIN@example.com ",
+        REDMART_COLLECTOR_TOKEN: "x".repeat(32),
+      }),
+    ).toEqual({
+      adminEmails: [
+        "kimberlyphuaweyhan@gmail.com",
+        "admin@example.com",
+      ],
+      collectorToken: "x".repeat(32),
+    });
+
+    expect(() =>
+      parseRedMartServerEnv({
+        ADMIN_EMAILS: "not-an-email",
+        REDMART_COLLECTOR_TOKEN: "short",
+      }),
+    ).toThrow();
+  });
+
   it("requires Supabase auth settings", () => {
     expect(() => parseAuthServerEnv({})).toThrow(
       "NEXT_PUBLIC_SUPABASE_URL"

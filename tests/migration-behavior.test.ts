@@ -43,6 +43,7 @@ runIntegration("multi-user migration behavior", () => {
       "TrackedProduct",
       "TrackedProductListing",
       "ScrapeAttempt",
+      "RedMartRefreshJob",
     ];
 
     const rlsTables = await sql<{ relname: string }[]>`
@@ -71,6 +72,7 @@ runIntegration("multi-user migration behavior", () => {
       "LoginIntent_requesterHash_createdAt_idx",
       "RetailerListing_id_retailerId_key",
       "TrackedProductListing_retailerId_idx",
+      "RedMartRefreshJob_activeKey_key",
     ];
     const indexes = await sql<{ indexdef: string; indexname: string }[]>`
       SELECT indexname, indexdef
