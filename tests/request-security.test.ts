@@ -4,13 +4,20 @@ import { describe, expect, it } from "vitest";
 import { requireSameOrigin } from "@/lib/auth/request-security";
 
 const MUTATION_ROUTES = [
+  "src/app/api/admin/redmart/refresh/route.ts",
   "src/app/api/prices/refresh/route.ts",
   "src/app/api/products/[id]/listings/route.ts",
   "src/app/api/products/[id]/route.ts",
   "src/app/api/products/preview/route.ts",
   "src/app/api/products/route.ts",
+  "src/app/api/redmart/refresh/route.ts",
   "src/app/api/scrape-runs/route.ts",
   "src/app/auth/signout/route.ts"
+];
+
+const COLLECTOR_MUTATION_ROUTES = [
+  "src/app/api/collector/redmart/jobs/[id]/result/route.ts",
+  "src/app/api/collector/redmart/jobs/claim/route.ts",
 ];
 
 describe("same-origin mutation protection", () => {
@@ -23,7 +30,9 @@ describe("same-origin mutation protection", () => {
         )
       );
 
-    expect(discovered).toEqual(MUTATION_ROUTES);
+    expect(discovered).toEqual(
+      [...MUTATION_ROUTES, ...COLLECTOR_MUTATION_ROUTES].sort(),
+    );
   });
 
   it.each([
@@ -83,12 +92,23 @@ describe("same-origin mutation protection", () => {
         const originCheck = body.indexOf("requireSameOrigin(request)");
         const authBoundary = Math.max(
           body.indexOf("await requireAppSession()"),
+          body.indexOf("await requireAdminSession()"),
           body.indexOf("createSupabaseServerClient()")
         );
         expect(originCheck).toBeGreaterThanOrEqual(0);
         expect(originCheck).toBeLessThan(authBoundary);
       });
     }
+  );
+
+  it.each(COLLECTOR_MUTATION_ROUTES)(
+    "%s uses bearer authentication instead of session cookies",
+    (path) => {
+      const source = readFileSync(path, "utf8");
+      expect(source).toContain("isCollectorAuthorized(request");
+      expect(source).not.toContain("requireAppSession");
+      expect(source).not.toContain("requireSameOrigin");
+    },
   );
 });
 

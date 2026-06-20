@@ -32,6 +32,7 @@ import { AuthSessionError } from "@/lib/auth/session";
 const PROTECTED_PAGES = [
   "src/app/account/page.tsx",
   "src/app/admin/matches/page.tsx",
+  "src/app/admin/redmart/page.tsx",
   "src/app/flyers/[id]/page.tsx",
   "src/app/flyers/page.tsx",
   "src/app/page.tsx",
@@ -42,6 +43,7 @@ const PROTECTED_PAGES = [
 ];
 
 const PROTECTED_ROUTE_HANDLERS = [
+  "src/app/api/admin/redmart/refresh/route.ts",
   "src/app/api/flyers/[id]/download/route.ts",
   "src/app/api/prices/latest/route.ts",
   "src/app/api/prices/refresh/route.ts",
@@ -49,7 +51,13 @@ const PROTECTED_ROUTE_HANDLERS = [
   "src/app/api/products/[id]/route.ts",
   "src/app/api/products/preview/route.ts",
   "src/app/api/products/route.ts",
+  "src/app/api/redmart/refresh/route.ts",
   "src/app/api/scrape-runs/route.ts"
+];
+
+const COLLECTOR_ROUTE_HANDLERS = [
+  "src/app/api/collector/redmart/jobs/[id]/result/route.ts",
+  "src/app/api/collector/redmart/jobs/claim/route.ts",
 ];
 
 describe("protected server entry point coverage", () => {
@@ -64,13 +72,19 @@ describe("protected server entry point coverage", () => {
       .filter((path) => !path.startsWith("src/app/auth/"));
 
     expect(pages).toEqual(PROTECTED_PAGES);
-    expect(routeHandlers).toEqual(PROTECTED_ROUTE_HANDLERS);
+    expect(routeHandlers).toEqual(
+      [...PROTECTED_ROUTE_HANDLERS, ...COLLECTOR_ROUTE_HANDLERS].sort(),
+    );
   });
 
   it.each(PROTECTED_PAGES)("%s invokes the protected page guard", (path) => {
     const source = readFileSync(path, "utf8");
 
-    expect(source).toContain("requireProtectedPage()");
+    expect(source).toContain(
+      path === "src/app/admin/redmart/page.tsx"
+        ? "requireAdminPage()"
+        : "requireProtectedPage()",
+    );
   });
 
   it.each(PROTECTED_ROUTE_HANDLERS)(
@@ -82,11 +96,20 @@ describe("protected server entry point coverage", () => {
           /export async function (?:GET|POST|PUT|PATCH|DELETE)\b/g
         ) ?? [];
       const appSessionChecks =
-        source.match(/\bawait requireAppSession\(\)/g) ?? [];
+        source.match(/\bawait require(?:App|Admin)Session\(\)/g) ?? [];
 
       expect(exportedHandlers.length).toBeGreaterThan(0);
       expect(appSessionChecks).toHaveLength(exportedHandlers.length);
     }
+  );
+
+  it.each(COLLECTOR_ROUTE_HANDLERS)(
+    "%s requires collector authorization instead of an app session",
+    (path) => {
+      const source = readFileSync(path, "utf8");
+      expect(source).toContain("isCollectorAuthorized(request");
+      expect(source).not.toContain("requireAppSession");
+    },
   );
 });
 
