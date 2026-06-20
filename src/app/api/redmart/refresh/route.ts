@@ -1,0 +1,39 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { appSessionErrorResponse } from "@/lib/auth/guards";
+import { requireSameOrigin } from "@/lib/auth/request-security";
+import { requireAppSession } from "@/lib/auth/session";
+import { queueOwnerRedMartRefreshes } from "@/lib/redmart/jobs";
+
+const requestSchema = z.object({
+  trackedProductId: z.string().trim().min(1).optional(),
+});
+
+export async function POST(request: Request) {
+  const originError = requireSameOrigin(request);
+  if (originError) return originError;
+
+  let session;
+  try {
+    session = await requireAppSession();
+  } catch (error) {
+    const response = appSessionErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
+
+  const payload = requestSchema.safeParse(
+    await request.json().catch(() => ({})),
+  );
+  if (!payload.success) {
+    return NextResponse.json({ error: "INVALID_INPUT" }, { status: 422 });
+  }
+
+  const result = await queueOwnerRedMartRefreshes(
+    undefined,
+    session.profileId,
+    session.profileId,
+    payload.data.trackedProductId,
+  );
+  return NextResponse.json(result, { status: 201 });
+}
