@@ -350,6 +350,7 @@ const prismaSharedListingRefreshStore: SharedListingRefreshStore = {
   async resolveOwnerListingIds(ownerId, trackedProductId) {
     const rows = await prisma.trackedProductListing.findMany({
       where: {
+        retailer: { slug: { not: "redmart" } },
         trackedProduct: {
           ownerId,
           isActive: true,
@@ -363,6 +364,7 @@ const prismaSharedListingRefreshStore: SharedListingRefreshStore = {
   async listActiveListingIds() {
     const rows = await prisma.retailerListing.findMany({
       where: {
+        retailer: { slug: { not: "redmart" } },
         trackedProductListings: {
           some: {
             trackedProduct: { isActive: true }

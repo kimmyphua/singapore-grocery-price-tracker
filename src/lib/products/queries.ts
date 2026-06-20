@@ -16,6 +16,10 @@ export const trackedProductQueryArgs =
               scrapeAttempts: {
                 orderBy: { startedAt: "desc" },
                 take: 1
+              },
+              redMartRefreshJobs: {
+                orderBy: { createdAt: "desc" },
+                take: 1
               }
             }
           }

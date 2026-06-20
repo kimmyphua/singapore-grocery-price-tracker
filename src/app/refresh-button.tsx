@@ -34,7 +34,7 @@ export function RefreshButton({
 
   return (
     <>
-      {state === "loading" ? <FullPageLoadingOverlay message="Refreshing supermarket prices..." /> : null}
+      {state === "loading" ? <FullPageLoadingOverlay message="Refreshing supermarket prices and queueing RedMart..." /> : null}
       <div className="flex flex-col items-stretch gap-2 sm:items-end">
         <button
           type="button"

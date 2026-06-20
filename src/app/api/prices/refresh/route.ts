@@ -4,6 +4,7 @@ import { appSessionErrorResponse } from "@/lib/auth/guards";
 import { requireAppSession } from "@/lib/auth/session";
 import { requireSameOrigin } from "@/lib/auth/request-security";
 import { NextResponse } from "next/server";
+import { queueOwnerRedMartRefreshes } from "@/lib/redmart/jobs";
 
 export const preferredRegion = "sin1";
 
@@ -35,10 +36,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 422 });
   }
 
-  const result = await refreshOwnerListings(
+  const immediate = await refreshOwnerListings(
     undefined,
     session.profileId,
     payload.data.trackedProductId
   );
-  return NextResponse.json(result, { status: 201 });
+  const redmart = await queueOwnerRedMartRefreshes(
+    undefined,
+    session.profileId,
+    session.profileId,
+    payload.data.trackedProductId,
+  );
+  return NextResponse.json({ immediate, redmart }, { status: 201 });
 }

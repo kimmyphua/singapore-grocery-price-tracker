@@ -4,7 +4,10 @@ import {
   getCachedLatestPricesFromRows,
   getCachedWeeklyPriceHistoryFromRows
 } from "@/lib/pricing/cached-prices";
-import { getTrackedProductRows } from "@/lib/products/queries";
+import {
+  getTrackedProductRows,
+  type TrackedProductQueryRow
+} from "@/lib/products/queries";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { RefreshButton } from "@/app/refresh-button";
@@ -130,6 +133,11 @@ export default async function ProductDetailPage({
                   retailerId={retailerListing.retailer.id}
                   retailerName={retailerListing.retailer.name}
                 />
+                {retailerListing.retailer.slug === "redmart" ? (
+                  <p className="mt-2 text-xs leading-5 text-slate-600">
+                    {formatRedMartRefreshStatus(retailerListing)}
+                  </p>
+                ) : null}
               </div>
             ))}
           </div>
@@ -335,17 +343,40 @@ function formatHistoryDate(date: PriceHistory["date"]) {
   return formatDate(date);
 }
 
-function formatCapturedDate(capturedAt: string) {
+function formatCapturedDate(capturedAt: string | Date) {
   return `Updated ${formatDate(capturedAt)}`;
 }
 
-function formatDate(value: string) {
+function formatDate(value: string | Date) {
   return new Intl.DateTimeFormat("en-SG", {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: "UTC"
   }).format(new Date(value));
+}
+
+function formatRedMartRefreshStatus(
+  listing: TrackedProductQueryRow["listings"][number]["retailerListing"],
+) {
+  const job = listing.redMartRefreshJobs[0];
+  if (!job) {
+    return "RedMart has not been queued yet.";
+  }
+  if (job.status === "PENDING") {
+    return "Waiting for RedMart refresh";
+  }
+  if (job.status === "PROCESSING") {
+    return "RedMart refresh in progress";
+  }
+  if (job.status === "FAILED") {
+    return `RedMart refresh failed: ${job.failureMessage ?? "Collection failed"}`;
+  }
+
+  const verifiedAt = listing.priceSnapshots[0]?.capturedAt ?? job.completedAt;
+  return verifiedAt
+    ? `RedMart verified ${formatDate(verifiedAt)}`
+    : "RedMart refresh completed";
 }
 
 function formatPrice(price: number | null) {

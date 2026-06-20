@@ -79,6 +79,27 @@ describe("authenticated private pages", () => {
     expect(source).toContain("getCachedWeeklyPriceHistoryFromRows");
   });
 
+  it("queues RedMart separately and shows its latest refresh state", () => {
+    const query = readFileSync("src/lib/products/queries.ts", "utf8");
+    const page = readFileSync("src/app/products/[slug]/page.tsx", "utf8");
+    const refreshRoute = readFileSync(
+      "src/app/api/prices/refresh/route.ts",
+      "utf8",
+    );
+    const refreshService = readFileSync(
+      "src/lib/pricing/refresh-prices.ts",
+      "utf8",
+    );
+
+    expect(query).toContain("redMartRefreshJobs");
+    expect(refreshRoute).toContain("queueOwnerRedMartRefreshes");
+    expect(refreshService).toContain('slug: { not: "redmart" }');
+    expect(page).toContain("Waiting for RedMart refresh");
+    expect(page).toContain("RedMart refresh in progress");
+    expect(page).toContain("RedMart refresh failed");
+    expect(page).toContain("RedMart verified");
+  });
+
   it("runs server functions in Singapore near the database and retailers", () => {
     const config = JSON.parse(readFileSync("vercel.json", "utf8"));
 
