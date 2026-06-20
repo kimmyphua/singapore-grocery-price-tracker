@@ -25,7 +25,7 @@ export type RefreshSummary = {
 
 type RefreshTrigger = "MANUAL" | "SCHEDULED";
 
-type RefreshListing = {
+export type RefreshListing = {
   id: string;
   productUrl: string;
   totalSize: number | null;
@@ -101,28 +101,7 @@ export async function refreshRetailerListing(
 
       try {
         const parsed = await scraper(listing);
-        if (
-          parsed.price === null ||
-          !Number.isFinite(parsed.price) ||
-          parsed.price <= 0
-        ) {
-          throw new InvalidScrapePriceError();
-        }
-
-        const totalSize =
-          listing.totalSize ??
-          parsePackSize(`${parsed.titleRaw} ${parsed.size ?? ""}`)
-            .totalSize;
-        await transaction.updateListing(listingId, parsed);
-        await transaction.createSnapshot({
-          retailerListingId: listingId,
-          price: parsed.price,
-          originalPrice: positiveOrNull(parsed.originalPrice),
-          unitPrice: parsed.price / totalSize,
-          promotionText: normalizeOptional(parsed.promotionText),
-          currency: normalizeOptional(parsed.currency) ?? "SGD",
-          isAvailable: parsed.isAvailable
-        });
+        await storeParsedListingResult(transaction, listing, parsed);
         await transaction.finishAttempt(attempt.id, {
           status: "COMPLETED",
           snapshotStored: true
@@ -161,6 +140,34 @@ export async function refreshRetailerListing(
   return locked.acquired
     ? (locked.value ?? { listingId, status: "FAILED" })
     : { listingId, status: "ALREADY_LOCKED" };
+}
+
+export async function storeParsedListingResult(
+  operations: ListingRefreshOperations,
+  listing: RefreshListing,
+  parsed: ParsedRetailerProduct,
+) {
+  if (
+    parsed.price === null ||
+    !Number.isFinite(parsed.price) ||
+    parsed.price <= 0
+  ) {
+    throw new InvalidScrapePriceError();
+  }
+
+  const totalSize =
+    listing.totalSize ??
+    parsePackSize(`${parsed.titleRaw} ${parsed.size ?? ""}`).totalSize;
+  await operations.updateListing(listing.id, parsed);
+  await operations.createSnapshot({
+    retailerListingId: listing.id,
+    price: parsed.price,
+    originalPrice: positiveOrNull(parsed.originalPrice),
+    unitPrice: parsed.price / totalSize,
+    promotionText: normalizeOptional(parsed.promotionText),
+    currency: normalizeOptional(parsed.currency) ?? "SGD",
+    isAvailable: parsed.isAvailable,
+  });
 }
 
 export async function refreshOwnerListings(
@@ -264,7 +271,7 @@ export function getListingRefreshTransactionOptions() {
 
 type PrismaRefreshClient = PrismaClient | Prisma.TransactionClient;
 
-function createPrismaOperations(
+export function createPrismaOperations(
   client: PrismaRefreshClient
 ): ListingRefreshOperations {
   return {

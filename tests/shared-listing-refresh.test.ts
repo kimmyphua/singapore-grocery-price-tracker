@@ -4,6 +4,7 @@ import {
   refreshOwnerListings,
   refreshRetailerListing,
   runScheduledRefresh,
+  storeParsedListingResult,
   type SharedListingRefreshStore
 } from "@/lib/pricing/refresh-prices";
 
@@ -68,6 +69,22 @@ const scraped = {
 };
 
 describe("shared listing refresh", () => {
+  it("stores a normalized parsed result without invoking a scraper", async () => {
+    const { store, snapshots } = createStore();
+    const listing = await store.findListing("listing-1");
+
+    await storeParsedListingResult(store, listing!, scraped);
+
+    expect(snapshots).toEqual([
+      expect.objectContaining({
+        retailerListingId: "listing-1",
+        price: 9.9,
+        originalPrice: 12.15,
+        promotionText: "Any 2 @ $19.80",
+      }),
+    ]);
+  });
+
   it("allows slow public retailer requests to finish inside the listing lock", () => {
     expect(getListingRefreshTransactionOptions()).toEqual({
       maxWait: 10_000,
