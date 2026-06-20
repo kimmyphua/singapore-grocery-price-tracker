@@ -25,10 +25,14 @@ type RedMartExtractionPage = {
 };
 
 export async function scrapeRedMartBrowserProductPage(
-  url: string
+  url: string,
+  options: { forceLocalChrome?: boolean } = {},
 ): Promise<ParsedRetailerProduct> {
   const browser = await chromium.launch(
-    process.env.VERCEL
+    shouldUseServerlessChromium(
+      options.forceLocalChrome ?? false,
+      process.env.VERCEL,
+    )
       ? {
           args: serverlessChromium.args,
           executablePath: await serverlessChromium.executablePath(),
@@ -75,6 +79,13 @@ export async function scrapeRedMartBrowserProductPage(
   } finally {
     await browser.close();
   }
+}
+
+export function shouldUseServerlessChromium(
+  forceLocalChrome: boolean,
+  vercelEnvironment: string | undefined,
+) {
+  return !forceLocalChrome && Boolean(vercelEnvironment);
 }
 
 export async function prepareRedMartProductPageForExtraction(

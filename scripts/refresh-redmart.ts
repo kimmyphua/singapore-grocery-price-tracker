@@ -34,7 +34,11 @@ async function main() {
         leaseExpiresAt: new Date(job.leaseExpiresAt),
       }));
     },
-    scrape: scrapeRedMartBrowserProductPage,
+    scrape(productUrl) {
+      return scrapeRedMartBrowserProductPage(productUrl, {
+        forceLocalChrome: true,
+      });
+    },
     async submit(jobId: string, payload: CollectorSubmission) {
       const response = await fetch(
         `${appOrigin}/api/collector/redmart/jobs/${jobId}/result`,

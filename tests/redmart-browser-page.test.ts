@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { prepareRedMartProductPageForExtraction } from "@/lib/scraping/redmart-browser-page";
+import {
+  prepareRedMartProductPageForExtraction,
+  shouldUseServerlessChromium,
+} from "@/lib/scraping/redmart-browser-page";
 
 describe("RedMart browser page scraper", () => {
+  it("forces installed Chrome for the Mac collector even with Vercel env loaded", () => {
+    expect(shouldUseServerlessChromium(true, "1")).toBe(false);
+    expect(shouldUseServerlessChromium(false, "1")).toBe(true);
+    expect(shouldUseServerlessChromium(false, undefined)).toBe(false);
+  });
+
   it("scrolls after initial load so lazy promotion modules can emit multibuy responses", async () => {
     const waitForLoadState = vi.fn().mockResolvedValue(undefined);
     const waitForTimeout = vi.fn().mockResolvedValue(undefined);
