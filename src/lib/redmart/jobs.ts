@@ -12,6 +12,7 @@ import {
   type RefreshListing,
 } from "@/lib/pricing/refresh-prices";
 import type { ParsedRetailerProduct } from "@/lib/scraping/product-page-types";
+import { getRedMartProductIdentity } from "@/lib/scraping/redmart-product-page";
 
 export type QueueCandidate = {
   listingId: string;
@@ -170,8 +171,8 @@ export async function completeRedMartJob(
 ) {
   const outcome = await store.withJobTransaction(jobId, async (transaction) => {
     const job = await requireProcessingJob(transaction, jobId, now);
-    const expected = getRedMartIdentity(job.listing.productUrl);
-    const actual = getRedMartIdentity(parsed.productUrl);
+    const expected = getRedMartProductIdentity(job.listing.productUrl);
+    const actual = getRedMartProductIdentity(parsed.productUrl);
     if (
       !expected ||
       !actual ||
@@ -251,13 +252,6 @@ async function queueCandidates(
   }
 
   return { created: jobs.length, alreadyActive, skipped, jobs };
-}
-
-function getRedMartIdentity(productUrl: string) {
-  const match = productUrl.match(/\/pdp-i(\d+)-s(\d+)\.html/i);
-  return match?.[1] && match[2]
-    ? { itemId: match[1], skuId: match[2] }
-    : null;
 }
 
 async function requireProcessingJob(
@@ -411,7 +405,7 @@ const prismaRedMartJobStore: RedMartJobStore = {
         orderBy: { createdAt: "asc" },
       });
       return jobs.flatMap((job) => {
-        const identity = getRedMartIdentity(job.listing.productUrl);
+        const identity = getRedMartProductIdentity(job.listing.productUrl);
         return identity
           ? [{
               id: job.id,

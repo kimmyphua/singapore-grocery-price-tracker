@@ -5,10 +5,20 @@ import {
   extractRedMartPrimaryPromotionText,
   extractRedMartPromotionText,
   extractRedMartPromotionTextFromApiPayload,
+  getRedMartProductIdentity,
   parseRedMartProductPage
 } from "@/lib/scraping/redmart-product-page";
 
 describe("RedMart/Lazada product page parser", () => {
+  it("extracts stable item and SKU identity from a RedMart product URL", () => {
+    expect(
+      getRedMartProductIdentity(
+        "https://www.lazada.sg/products/pdp-i2896336114-s20072727483.html?price=14.78",
+      ),
+    ).toEqual({ itemId: "2896336114", skuId: "20072727483" });
+    expect(getRedMartProductIdentity("https://www.lazada.sg/shop/redmart")).toBeNull();
+  });
+
   it("extracts product data from Lazada pdp tracking data", () => {
     const html = `
       <meta property="og:image" content="https://img.lazcdn.com/magnum.webp" />
@@ -197,6 +207,39 @@ Any 2 For $25.10
         titleRaw: "Magnum Mini White Chocolate Almond Mix 6x55ml - Frozen"
       })
     ).toBe("Any 3 Save 38%; Spend $45.00 + free gift");
+  });
+
+  it("extracts a matching multibuy promotion from data.sections", () => {
+    const payload = JSON.stringify({
+      data: {
+        sections: [
+          {
+            descriptionText: "Any 2 For $27.50",
+            products: [
+              {
+                itemId: "2896336114",
+                skuId: "20072727483",
+                title: "Haagen-Dazs Pistachio 420ML",
+              },
+              {
+                itemId: "301126782",
+                skuId: "527208586",
+                title: "Haagen-Dazs Green Tea 473ML",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(
+      extractRedMartPromotionTextFromApiPayload([payload], {
+        productUrl:
+          "https://www.lazada.sg/products/pdp-i2896336114-s20072727483.html",
+        retailerSku: "20072727483",
+        titleRaw: "Haagen-Dazs Pistachio 420ML",
+      }),
+    ).toBe("Any 2 For $27.50");
   });
 
   it("extracts fixed-value RedMart multibuy promotions from matching product tags", () => {

@@ -19,7 +19,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "scrape": "tsx src/lib/scraping/run-scrape.ts",
-    "scrape:url": "tsx src/lib/scraping/scrape-url.ts"
+    "scrape:url": "tsx src/lib/scraping/scrape-url.ts",
+    "redmart:refresh": "tsx scripts/refresh-redmart.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

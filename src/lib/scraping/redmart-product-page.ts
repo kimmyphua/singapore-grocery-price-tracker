@@ -345,7 +345,12 @@ function findPromotionGroups(value: unknown): Array<{
 
   const record = value as Record<string, unknown>;
   const products = Object.values(record).find(isPromotionProductArray);
-  const title = typeof record.title === "string" ? record.title : undefined;
+  const title =
+    typeof record.title === "string"
+      ? record.title
+      : typeof record.descriptionText === "string"
+        ? record.descriptionText
+        : undefined;
   const current = title && products ? [{ title, products }] : [];
 
   return [
@@ -358,6 +363,13 @@ function findPromotionGroups(value: unknown): Array<{
       return findPromotionGroups(child);
     })
   ];
+}
+
+export function getRedMartProductIdentity(productUrl: string) {
+  const match = productUrl.match(/\/pdp-i(\d+)-s(\d+)\.html/i);
+  return match?.[1] && match[2]
+    ? { itemId: match[1], skuId: match[2] }
+    : null;
 }
 
 function isPromotionProductArray(value: unknown): value is RedMartPromotionProduct[] {
