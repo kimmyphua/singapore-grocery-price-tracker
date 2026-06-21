@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   discoverColdStorageEdition,
+  discoverColdStorageEditionUrl,
   discoverFairPriceEdition
 } from "@/lib/flyers/sources";
 
@@ -13,6 +14,21 @@ function fixture(name: string) {
 }
 
 describe("flyer source discovery", () => {
+  it("resolves the current Cold Storage grocery flyer from the weekly ads index", () => {
+    const html = `
+      <a href="/weekly-ads/Fresh-Selections-1">
+        Fresh Selections (Till 24 June)
+      </a>
+      <a href="/weekly-ads/Grocery-Selections-1">
+        Grocery Selections (Till 24 June)
+      </a>
+    `;
+
+    expect(discoverColdStorageEditionUrl(html)).toBe(
+      "https://coldstorage.com.sg/weekly-ads/Grocery-Selections-1"
+    );
+  });
+
   it("discovers the current Cold Storage grocery PDF", () => {
     expect(
       discoverColdStorageEdition(fixture("cold-storage-weekly.html"), {

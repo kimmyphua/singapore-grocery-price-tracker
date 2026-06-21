@@ -3,8 +3,7 @@ export const FLYER_SOURCES = [
     key: "cold-storage-grocery-selections",
     retailerSlug: "cold-storage",
     title: "Cold Storage Grocery Selections",
-    landingUrl:
-      "https://coldstorage.com.sg/weekly-ads/Grocery-Selections",
+    landingUrl: "https://coldstorage.com.sg/weekly-ads",
     kind: "DIRECT_PDF"
   },
   {

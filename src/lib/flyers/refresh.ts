@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import {
   discoverColdStorageEdition,
+  discoverColdStorageEditionUrl,
   discoverFairPriceEdition
 } from "./sources";
 import { FLYER_SOURCES } from "./seed";
@@ -199,11 +200,22 @@ async function discoverFlyerSource(source: ActiveFlyerSource) {
       process.env.SCRAPER_USER_AGENT ?? "SingaporeGroceryPriceTracker/0.1"
   };
   if (source.kind === "DIRECT_PDF") {
-    const response = await fetch(source.landingUrl, { headers });
-    if (!response.ok) {
-      throw new Error(`Flyer source request failed with ${response.status}.`);
+    const indexResponse = await fetch(source.landingUrl, { headers });
+    if (!indexResponse.ok) {
+      throw new Error(
+        `Flyer source request failed with ${indexResponse.status}.`
+      );
     }
-    return discoverColdStorageEdition(await response.text());
+    const editionUrl = discoverColdStorageEditionUrl(
+      await indexResponse.text()
+    );
+    const editionResponse = await fetch(editionUrl, { headers });
+    if (!editionResponse.ok) {
+      throw new Error(
+        `Flyer edition request failed with ${editionResponse.status}.`
+      );
+    }
+    return discoverColdStorageEdition(await editionResponse.text());
   }
 
   const baseUrl = source.landingUrl.replace(/\/page\/\d+\/?$/, "");

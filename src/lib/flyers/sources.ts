@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { DiscoveredFlyerEdition } from "./types";
 
 const COLD_STORAGE_URL =
-  "https://coldstorage.com.sg/weekly-ads/Grocery-Selections";
+  "https://coldstorage.com.sg/weekly-ads";
 const FAIRPRICE_URL =
   "https://promotions.fairprice.com.sg/price-drop-buy-now-weekly-savers/page/1";
 
@@ -66,6 +66,29 @@ export function discoverColdStorageEdition(
       dates.validTo?.toISOString() ?? ""
     ])
   };
+}
+
+export function discoverColdStorageEditionUrl(html: string) {
+  const $ = cheerio.load(html);
+  const href = $("a")
+    .toArray()
+    .find((element) =>
+      $(element).text().trim().toLowerCase().startsWith("grocery selections")
+    );
+  const value = href ? $(href).attr("href") : undefined;
+
+  if (!value) {
+    throw new Error("Cold Storage grocery flyer link was not found.");
+  }
+
+  const url = new URL(value, COLD_STORAGE_URL);
+  if (
+    url.origin !== "https://coldstorage.com.sg" ||
+    !url.pathname.startsWith("/weekly-ads/Grocery-Selections")
+  ) {
+    throw new Error("Cold Storage grocery flyer URL is not supported.");
+  }
+  return url.toString();
 }
 
 export function discoverFairPriceEdition(
